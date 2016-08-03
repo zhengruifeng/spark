@@ -24,18 +24,17 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.classification.{NaiveBayes => OldNaiveBayes}
-import org.apache.spark.mllib.classification.{NaiveBayesModel => OldNaiveBayesModel}
-import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
-import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.expressions._
+import org.apache.spark.sql.functions.{col, lit, sum}
+import org.apache.spark.sql.types.{DataType, DoubleType, StructField, StructType}
 
 /**
  * Params for Naive Bayes Classifiers.
  */
-private[ml] trait NaiveBayesParams extends PredictorParams {
+private[ml] trait NaiveBayesParams extends PredictorParams with HasWeightCol {
 
   /**
    * The smoothing parameter.
@@ -56,7 +55,7 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
    */
   final val modelType: Param[String] = new Param[String](this, "modelType", "The model type " +
     "which is a string (case-sensitive). Supported options: multinomial (default) and bernoulli.",
-    ParamValidators.inArray[String](OldNaiveBayes.supportedModelTypes.toArray))
+    ParamValidators.inArray[String](NaiveBayes.supportedModelTypes.toArray))
 
   /** @group getParam */
   final def getModelType: String = $(modelType)
@@ -64,7 +63,7 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
 
 /**
  * Naive Bayes Classifiers.
- * It supports both Multinomial NB
+ * It supports Multinomial NB
  * ([[http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html]])
  * which can handle finitely supported discrete data. For example, by converting documents into
  * TF-IDF vectors, it can be used for document classification. By making every vector a
@@ -77,6 +76,8 @@ class NaiveBayes @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, NaiveBayes, NaiveBayesModel]
   with NaiveBayesParams with DefaultParamsWritable {
+
+  import NaiveBayes.{Bernoulli, Multinomial}
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("nb"))
@@ -98,7 +99,17 @@ class NaiveBayes @Since("1.5.0") (
    */
   @Since("1.5.0")
   def setModelType(value: String): this.type = set(modelType, value)
-  setDefault(modelType -> OldNaiveBayes.Multinomial)
+  setDefault(modelType -> NaiveBayes.Multinomial)
+
+  /**
+   * Whether to over-/under-sample training instances according to the given weights in weightCol.
+   * If empty, all instances are treated equally (weight 1.0).
+   * Default is empty, so all instances have weight one.
+   * @group setParam
+   */
+  @Since("2.1.0")
+  def setWeightCol(value: String): this.type = set(weightCol, value)
+  setDefault(weightCol -> "")
 
   override protected def train(dataset: Dataset[_]): NaiveBayesModel = {
     val numClasses = getNumClasses(dataset)
@@ -109,10 +120,53 @@ class NaiveBayes @Since("1.5.0") (
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
-    val oldDataset: RDD[OldLabeledPoint] =
-      extractLabeledPoints(dataset).map(OldLabeledPoint.fromML)
-    val oldModel = OldNaiveBayes.train(oldDataset, $(smoothing), $(modelType))
-    NaiveBayesModel.fromOld(oldModel, this)
+    val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
+
+    val wvsum = new WeightedVectorSum($(modelType), numFeatures)
+
+    val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+
+    val aggregated =
+      dataset.select(col($(labelCol)).cast(DoubleType).as("label"), w.as("weight"),
+        col($(featuresCol)).as("features"))
+        .groupBy(col($(labelCol)))
+        .agg(sum(col("weight")), wvsum(col("weight"), col("features")))
+        .collect().map { row =>
+        (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2).toDense))
+      }.sortBy(_._1)
+
+    val numLabels = aggregated.length
+    val numDocuments = aggregated.map(_._2._1).sum
+
+    val labels = new Array[Double](numLabels)
+    val pi = new Array[Double](numLabels)
+    val theta = Array.fill(numLabels)(new Array[Double](numFeatures))
+
+    val lambda = $(smoothing)
+    val piLogDenom = math.log(numDocuments + numLabels * lambda)
+    var i = 0
+    aggregated.foreach { case (label, (n, sumTermFreqs)) =>
+      labels(i) = label
+      pi(i) = math.log(n + lambda) - piLogDenom
+      val thetaLogDenom = $(modelType) match {
+        case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
+        case Bernoulli => math.log(n + 2.0 * lambda)
+        case _ =>
+          // This should never happen.
+          throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+      }
+      var j = 0
+      while (j < numFeatures) {
+        theta(i)(j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
+        j += 1
+      }
+      i += 1
+    }
+
+    val uid = Identifiable.randomUID("nb")
+    val piVector = Vectors.dense(pi)
+    val thetaMatrix = new DenseMatrix(numLabels, theta(0).length, theta.flatten, true)
+    new NaiveBayesModel(uid, piVector, thetaMatrix)
   }
 
   @Since("1.5.0")
@@ -121,6 +175,14 @@ class NaiveBayes @Since("1.5.0") (
 
 @Since("1.6.0")
 object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
+  /** String name for multinomial model type. */
+  private[spark] val Multinomial: String = "multinomial"
+
+  /** String name for Bernoulli model type. */
+  private[spark] val Bernoulli: String = "bernoulli"
+
+  /* Set of modelTypes that NaiveBayes supports */
+  private[spark] val supportedModelTypes = Set(Multinomial, Bernoulli)
 
   @Since("1.6.0")
   override def load(path: String): NaiveBayes = super.load(path)
@@ -140,7 +202,7 @@ class NaiveBayesModel private[ml] (
   extends ProbabilisticClassificationModel[Vector, NaiveBayesModel]
   with NaiveBayesParams with MLWritable {
 
-  import OldNaiveBayes.{Bernoulli, Multinomial}
+  import NaiveBayes.{Bernoulli, Multinomial}
 
   /**
    * Bernoulli scoring requires log(condprob) if 1, log(1-condprob) if 0.
@@ -238,18 +300,6 @@ class NaiveBayesModel private[ml] (
 @Since("1.6.0")
 object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
 
-  /** Convert a model from the old API */
-  private[ml] def fromOld(
-      oldModel: OldNaiveBayesModel,
-      parent: NaiveBayes): NaiveBayesModel = {
-    val uid = if (parent != null) parent.uid else Identifiable.randomUID("nb")
-    val labels = Vectors.dense(oldModel.labels)
-    val pi = Vectors.dense(oldModel.pi)
-    val theta = new DenseMatrix(oldModel.labels.length, oldModel.theta(0).length,
-      oldModel.theta.flatten, true)
-    new NaiveBayesModel(uid, pi, theta)
-  }
-
   @Since("1.6.0")
   override def read: MLReader[NaiveBayesModel] = new NaiveBayesModelReader
 
@@ -280,15 +330,90 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-      val vecConverted = MLUtils.convertVectorColumnsToML(data, "pi")
-      val Row(pi: Vector, theta: Matrix) = MLUtils.convertMatrixColumnsToML(vecConverted, "theta")
-        .select("pi", "theta")
-        .head()
+      val data = sparkSession.read.parquet(dataPath).select("pi", "theta").head()
+      val pi = data.getAs[Vector](0)
+      val theta = data.getAs[Matrix](1)
       val model = new NaiveBayesModel(metadata.uid, pi, theta)
 
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }
+}
+
+
+/**
+ * UDAF to calculate the weighted sum of vectors.
+ * @param modelType modelType
+ * @param numFeatures number of features
+ */
+@Since("2.1.0")
+private class WeightedVectorSum(modelType: String, numFeatures: Int)
+  extends UserDefinedAggregateFunction {
+
+  import NaiveBayes.{Bernoulli, Multinomial}
+
+  val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
+    val values = v match {
+      case sv: SparseVector => sv.values
+      case dv: DenseVector => dv.values
+    }
+    if (!values.forall(_ >= 0.0)) {
+      throw new SparkException(s"Naive Bayes requires nonnegative feature values but found $v.")
+    }
+  }
+
+  val requireZeroOneBernoulliValues: Vector => Unit = (v: Vector) => {
+    val values = v match {
+      case sv: SparseVector => sv.values
+      case dv: DenseVector => dv.values
+    }
+    if (!values.forall(v => v == 0.0 || v == 1.0)) {
+      throw new SparkException(
+        s"Bernoulli naive Bayes requires 0 or 1 feature values but found $v.")
+    }
+  }
+
+  val requireValues: Vector => Unit = {
+    modelType match {
+      case Multinomial =>
+        requireNonnegativeValues
+      case Bernoulli =>
+        requireZeroOneBernoulliValues
+      case _ =>
+        // This should never happen.
+        throw new UnknownError(s"Invalid modelType: ${modelType}.")
+    }
+  }
+
+  override def inputSchema: StructType = StructType(StructField("weight", DoubleType) ::
+    StructField("features", new VectorUDT) :: Nil)
+
+  override def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
+    val w = input.getDouble(0)
+    val v = input.getAs[Vector](1)
+    requireValues(v)
+    val s = buffer.getAs[Vector](0)
+    BLAS.axpy(w, v, s)
+    buffer(0) = s
+  }
+
+  override def bufferSchema: StructType = StructType(StructField("sum", new VectorUDT) :: Nil)
+
+  override def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
+    val s1 = buffer1.getAs[Vector](0)
+    val s2 = buffer2.getAs[Vector](0)
+    BLAS.axpy(1.0, s2, s1)
+    buffer1(0) = s1
+  }
+
+  override def initialize(buffer: MutableAggregationBuffer): Unit = {
+    buffer(0) = Vectors.zeros(numFeatures)
+  }
+
+  override def deterministic: Boolean = true
+
+  override def evaluate(buffer: Row): Any = buffer.getAs[Vector](0)
+
+  override def dataType: DataType = new VectorUDT
 }

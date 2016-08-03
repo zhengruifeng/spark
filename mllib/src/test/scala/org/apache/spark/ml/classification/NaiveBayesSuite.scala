@@ -23,13 +23,13 @@ import breeze.linalg.{DenseVector => BDV, Vector => BV}
 import breeze.stats.distributions.{Multinomial => BrzMultinomial}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.classification.NaiveBayes.{Bernoulli, Multinomial}
 import org.apache.spark.ml.classification.NaiveBayesSuite._
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.classification.NaiveBayes.{Bernoulli, Multinomial}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 
@@ -150,6 +150,75 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     validateProbabilities(featureAndProbabilities, model, "multinomial")
   }
 
+  test("Naive Bayes Multinomial with weighted samples") {
+    val (dataset, weightedDataset) = {
+      val nPoints = 1000
+      val piArray = Array(0.5, 0.1, 0.4).map(math.log)
+      val thetaArray = Array(
+        Array(0.70, 0.10, 0.10, 0.10), // label 0
+        Array(0.10, 0.70, 0.10, 0.10), // label 1
+        Array(0.10, 0.10, 0.70, 0.10) // label 2
+      ).map(_.map(math.log))
+      val pi = Vectors.dense(piArray)
+      val theta = new DenseMatrix(3, 4, thetaArray.flatten, true)
+
+      val testData = generateNaiveBayesInput(piArray, thetaArray, nPoints, 42, "multinomial")
+
+      // Let's over-sample the label-1 samples twice, label-2 samples triple.
+      val data1 = testData.flatMap { case labeledPoint: LabeledPoint =>
+        labeledPoint.label match {
+          case 0.0 => Iterator(labeledPoint)
+          case 1.0 => Iterator(labeledPoint, labeledPoint)
+          case 2.0 => Iterator(labeledPoint, labeledPoint, labeledPoint)
+        }
+      }
+
+      val rnd = new Random(8392)
+      val data2 = testData.flatMap { case LabeledPoint(label: Double, features: Vector) =>
+        if (rnd.nextGaussian() > 0.0) {
+          label match {
+            case 0.0 => Iterator(
+              Instance(label, 0.3, features),
+              Instance(label, 0.7, features),
+              Instance(1.0, 0.0, features),
+              Instance(2.0, 0.0, features))
+            case 1.0 => Iterator(
+              Instance(label, 0.3, features),
+              Instance(label, 0.7, features),
+              Instance(label, 1.0, features),
+              Instance(0.0, 0.0, features),
+              Instance(2.0, 0.0, features))
+            case 2.0 => Iterator(
+              Instance(label, 1.5, features),
+              Instance(label, 1.4, features),
+              Instance(label, 0.1, features),
+              Instance(0.0, 0.0, features),
+              Instance(1.0, 0.0, features))
+          }
+        } else {
+          label match {
+            case 0.0 => Iterator(Instance(label, 1.0, features))
+            case 1.0 => Iterator(Instance(label, 2.0, features))
+            case 2.0 => Iterator(Instance(label, 3.0, features))
+          }
+        }
+      }
+
+      (spark.createDataFrame(sc.parallelize(data1, 4)),
+        spark.createDataFrame(sc.parallelize(data2, 4)))
+    }
+
+    val trainer1a = new NaiveBayes().setModelType("multinomial")
+    val trainer1b = new NaiveBayes().setModelType("multinomial").setWeightCol("weight")
+    val model1a0 = trainer1a.fit(dataset)
+    val model1a1 = trainer1a.fit(weightedDataset)
+    val model1b = trainer1b.fit(weightedDataset)
+    assert(model1a0.theta !~= model1a1.theta absTol 1E-3)
+    assert(model1a0.pi !~= model1a1.pi absTol 1E-3)
+    assert(model1a0.theta ~== model1b.theta absTol 1E-3)
+    assert(model1a0.pi ~== model1b.pi absTol 1E-3)
+  }
+
   test("Naive Bayes Bernoulli") {
     val nPoints = 10000
     val piArray = Array(0.5, 0.3, 0.2).map(math.log)
@@ -178,6 +247,75 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val featureAndProbabilities = model.transform(validationDataset)
       .select("features", "probability")
     validateProbabilities(featureAndProbabilities, model, "bernoulli")
+  }
+
+  test("Naive Bayes Bernoulli with weighted samples") {
+    val (dataset, weightedDataset) = {
+      val nPoints = 10000
+      val piArray = Array(0.5, 0.3, 0.2).map(math.log)
+      val thetaArray = Array(
+        Array(0.50, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.40), // label 0
+        Array(0.02, 0.70, 0.10, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02), // label 1
+        Array(0.02, 0.02, 0.60, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.30)  // label 2
+      ).map(_.map(math.log))
+      val pi = Vectors.dense(piArray)
+      val theta = new DenseMatrix(3, 12, thetaArray.flatten, true)
+
+      val testData = generateNaiveBayesInput(piArray, thetaArray, nPoints, 45, "bernoulli")
+
+      // Let's over-sample the label-1 samples twice, label-2 samples triple.
+      val data1 = testData.flatMap { case labeledPoint: LabeledPoint =>
+        labeledPoint.label match {
+          case 0.0 => Iterator(labeledPoint)
+          case 1.0 => Iterator(labeledPoint, labeledPoint)
+          case 2.0 => Iterator(labeledPoint, labeledPoint, labeledPoint)
+        }
+      }
+
+      val rnd = new Random(8392)
+      val data2 = testData.flatMap { case LabeledPoint(label: Double, features: Vector) =>
+        if (rnd.nextGaussian() > 0.0) {
+          label match {
+            case 0.0 => Iterator(
+              Instance(label, 0.3, features),
+              Instance(label, 0.7, features),
+              Instance(1.0, 0.0, features),
+              Instance(2.0, 0.0, features))
+            case 1.0 => Iterator(
+              Instance(label, 0.3, features),
+              Instance(label, 0.7, features),
+              Instance(label, 1.0, features),
+              Instance(0.0, 0.0, features),
+              Instance(2.0, 0.0, features))
+            case 2.0 => Iterator(
+              Instance(label, 1.5, features),
+              Instance(label, 1.4, features),
+              Instance(label, 0.1, features),
+              Instance(0.0, 0.0, features),
+              Instance(1.0, 0.0, features))
+          }
+        } else {
+          label match {
+            case 0.0 => Iterator(Instance(label, 1.0, features))
+            case 1.0 => Iterator(Instance(label, 2.0, features))
+            case 2.0 => Iterator(Instance(label, 3.0, features))
+          }
+        }
+      }
+
+      (spark.createDataFrame(sc.parallelize(data1, 4)),
+        spark.createDataFrame(sc.parallelize(data2, 4)))
+    }
+
+    val trainer1a = new NaiveBayes().setModelType("bernoulli")
+    val trainer1b = new NaiveBayes().setModelType("bernoulli").setWeightCol("weight")
+    val model1a0 = trainer1a.fit(dataset)
+    val model1a1 = trainer1a.fit(weightedDataset)
+    val model1b = trainer1b.fit(weightedDataset)
+    assert(model1a0.theta !~= model1a1.theta absTol 1E-3)
+    assert(model1a0.pi !~= model1a1.pi absTol 1E-3)
+    assert(model1a0.theta ~== model1b.theta absTol 1E-3)
+    assert(model1a0.pi ~== model1b.pi absTol 1E-3)
   }
 
   test("read/write") {
