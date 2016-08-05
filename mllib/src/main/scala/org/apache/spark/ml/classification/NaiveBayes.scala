@@ -138,15 +138,13 @@ class NaiveBayes @Since("1.5.0") (
     val numLabels = aggregated.length
     val numDocuments = aggregated.map(_._2._1).sum
 
-    val labels = new Array[Double](numLabels)
-    val pi = new Array[Double](numLabels)
-    val theta = Array.fill(numLabels)(new Array[Double](numFeatures))
+    val pi = Array.fill[Double](numLabels)(0.0)
+    val theta = Array.fill[Double](numLabels, numFeatures)(0.0)
 
     val lambda = $(smoothing)
     val piLogDenom = math.log(numDocuments + numLabels * lambda)
     var i = 0
     aggregated.foreach { case (label, (n, sumTermFreqs)) =>
-      labels(i) = label
       pi(i) = math.log(n + lambda) - piLogDenom
       val thetaLogDenom = $(modelType) match {
         case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
