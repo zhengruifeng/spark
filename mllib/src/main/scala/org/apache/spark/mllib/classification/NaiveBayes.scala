@@ -367,14 +367,17 @@ class NaiveBayes private (
       .setModelType(modelType)
       .setSmoothing(lambda)
 
+    val labels = data.map(_.label).distinct().collect().sorted
+
+    // Input labels for [[org.apache.spark.ml.classification.NaiveBayes]] must be
+    // in range [0, numClasses).
     val dataset = data.map {
       case LabeledPoint(label, features) =>
-        (label, features.asML)
+        (labels.indexOf(label), features.asML)
     }.toDF("label", "features")
 
     val newModel = nb.fit(dataset)
 
-    val labels = Array.range(0, newModel.numClasses).map(_.toDouble)
     val pi = newModel.pi.toArray
     val theta = Array.fill[Double](newModel.numClasses, newModel.numFeatures)(0.0)
     newModel.theta.foreachActive {
