@@ -373,7 +373,7 @@ class NaiveBayes private (
     // in range [0, numClasses).
     val dataset = data.map {
       case LabeledPoint(label, features) =>
-        (labels.indexOf(label), features.asML)
+        (labels.indexOf(label).toDouble, features.asML)
     }.toDF("label", "features")
 
     val newModel = nb.fit(dataset)
