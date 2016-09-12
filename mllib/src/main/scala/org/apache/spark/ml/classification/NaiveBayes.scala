@@ -102,9 +102,10 @@ class NaiveBayes @Since("1.5.0") (
   setDefault(modelType -> NaiveBayes.Multinomial)
 
   /**
-   * Whether to over-/under-sample training instances according to the given weights in weightCol.
-   * If empty, all instances are treated equally (weight 1.0).
-   * Default is empty, so all instances have weight one.
+   * Sets the value of param [[weightCol]].
+   * If this is not set or empty, we treat all instance weights as 1.0.
+   * Default is not set, so all instances have weight one.
+   *
    * @group setParam
    */
   @Since("2.1.0")
