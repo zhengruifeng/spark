@@ -110,7 +110,6 @@ class NaiveBayes @Since("1.5.0") (
    */
   @Since("2.1.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
-  setDefault(weightCol -> "")
 
   override protected def train(dataset: Dataset[_]): NaiveBayesModel = {
     val numClasses = getNumClasses(dataset)
