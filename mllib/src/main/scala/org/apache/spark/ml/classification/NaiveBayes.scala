@@ -124,7 +124,7 @@ class NaiveBayes @Since("1.5.0") (
 
     val wvsum = new WeightedVectorSum($(modelType), numFeatures)
 
-    val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
     val aggregated =
       dataset.select(col($(labelCol)).cast(DoubleType).as("label"), w.as("weight"),
