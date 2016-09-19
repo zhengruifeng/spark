@@ -153,23 +153,24 @@ class NaiveBayes @Since("1.5.0") (
           // This should never happen.
           throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
       }
+    }
 
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
-    val aggregated = dataset.select(col($(labelCol)).cast(DoubleType),
-      w, col($(featuresCol))).rdd.map { row =>
-         (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2)))
-     }.aggregateByKey[(Double, DenseVector)]((0.0, Vectors.zeros(numFeatures).toDense))(
-       seqOp = {
-         case ((weightSum, weightedFeaturesSum), (weight, features)) =>
+    val aggregated = dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd
+      .map { row => (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2)))
+      }.aggregateByKey[(Double, DenseVector)]((0.0, Vectors.zeros(numFeatures).toDense))(
+      seqOp = {
+         case (agg, (weight, features)) =>
            requireValues(features)
-           BLAS.axpy(weight, features, weightedFeaturesSum)
-           (weightSum + weight, weightedFeaturesSum)
-       }, combOp = {
-         case ((weightSum1, weightedFeaturesSum1), (weightSum2, weightedFeaturesSum2)) =>
-           BLAS.axpy(1.0, weightedFeaturesSum2, weightedFeaturesSum1)
-           (weightSum1 + weightSum2, weightedFeaturesSum1)
-       }).collect().sortBy(_._1)
+           BLAS.axpy(weight, features, agg._2)
+           (agg._1 + weight, agg._2)
+      },
+      combOp = {
+         case (agg1, agg2) =>
+           BLAS.axpy(1.0, agg2._2, agg1._2)
+           (agg1._1 + agg2._1, agg1._2)
+      }).collect().sortBy(_._1)
 
     val numLabels = aggregated.length
     val numDocuments = aggregated.map(_._2._1).sum
@@ -373,5 +374,5 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       model
     }
   }
-}
 
+}
