@@ -18,7 +18,6 @@
 package org.apache.spark.ml.classification
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
@@ -26,7 +25,8 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.expressions._
 import org.apache.spark.sql.functions.{col, lit, sum}
 import org.apache.spark.sql.types.{DataType, DoubleType, StructField, StructType}
@@ -122,18 +122,54 @@ class NaiveBayes @Since("1.5.0") (
 
     val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
 
-    val wvsum = new WeightedVectorSum($(modelType), numFeatures)
+    val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
+      val values = v match {
+        case sv: SparseVector => sv.values
+        case dv: DenseVector => dv.values
+      }
+      if (!values.forall(_ >= 0.0)) {
+        throw new SparkException(s"Naive Bayes requires nonnegative feature values but found $v.")
+      }
+    }
+
+    val requireZeroOneBernoulliValues: Vector => Unit = (v: Vector) => {
+      val values = v match {
+        case sv: SparseVector => sv.values
+        case dv: DenseVector => dv.values
+      }
+      if (!values.forall(v => v == 0.0 || v == 1.0)) {
+        throw new SparkException(
+          s"Bernoulli naive Bayes requires 0 or 1 feature values but found $v.")
+      }
+    }
+
+    val requireValues: Vector => Unit = {
+      $(modelType) match {
+        case Multinomial =>
+          requireNonnegativeValues
+        case Bernoulli =>
+          requireZeroOneBernoulliValues
+        case _ =>
+          // This should never happen.
+          throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+      }
 
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
-    val aggregated =
-      dataset.select(col($(labelCol)).cast(DoubleType).as("label"), w.as("weight"),
-        col($(featuresCol)).as("features"))
-        .groupBy(col($(labelCol)))
-        .agg(sum(col("weight")), wvsum(col("weight"), col("features")))
-        .collect().map { row =>
-        (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2).toDense))
-      }.sortBy(_._1)
+    val aggregated = dataset.select(col($(labelCol)).cast(DoubleType),
+      w, col($(featuresCol))).rdd.map { row =>
+         (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2)))
+     }.aggregateByKey[(Double, DenseVector)]((0.0, Vectors.zeros(numFeatures).toDense))(
+       seqOp = {
+         case ((weightSum, weightedFeaturesSum), (weight, features)) =>
+           requireValues(features)
+           BLAS.axpy(weight, features, weightedFeaturesSum)
+           (weightSum + weight, weightedFeaturesSum)
+       }, combOp = {
+         case ((weightSum1, weightedFeaturesSum1), (weightSum2, weightedFeaturesSum2)) =>
+           BLAS.axpy(1.0, weightedFeaturesSum2, weightedFeaturesSum1)
+           (weightSum1 + weightSum2, weightedFeaturesSum1)
+       }).collect().sortBy(_._1)
 
     val numLabels = aggregated.length
     val numDocuments = aggregated.map(_._2._1).sum
@@ -339,79 +375,3 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
   }
 }
 
-
-/**
- * UDAF to calculate the weighted sum of vectors.
- * @param modelType modelType
- * @param numFeatures number of features
- */
-@Since("2.1.0")
-private class WeightedVectorSum(modelType: String, numFeatures: Int)
-  extends UserDefinedAggregateFunction {
-
-  import NaiveBayes.{Bernoulli, Multinomial}
-
-  val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
-    val values = v match {
-      case sv: SparseVector => sv.values
-      case dv: DenseVector => dv.values
-    }
-    if (!values.forall(_ >= 0.0)) {
-      throw new SparkException(s"Naive Bayes requires nonnegative feature values but found $v.")
-    }
-  }
-
-  val requireZeroOneBernoulliValues: Vector => Unit = (v: Vector) => {
-    val values = v match {
-      case sv: SparseVector => sv.values
-      case dv: DenseVector => dv.values
-    }
-    if (!values.forall(v => v == 0.0 || v == 1.0)) {
-      throw new SparkException(
-        s"Bernoulli naive Bayes requires 0 or 1 feature values but found $v.")
-    }
-  }
-
-  val requireValues: Vector => Unit = {
-    modelType match {
-      case Multinomial =>
-        requireNonnegativeValues
-      case Bernoulli =>
-        requireZeroOneBernoulliValues
-      case _ =>
-        // This should never happen.
-        throw new UnknownError(s"Invalid modelType: ${modelType}.")
-    }
-  }
-
-  override def inputSchema: StructType = StructType(StructField("weight", DoubleType) ::
-    StructField("features", new VectorUDT) :: Nil)
-
-  override def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
-    val w = input.getDouble(0)
-    val v = input.getAs[Vector](1)
-    requireValues(v)
-    val s = buffer.getAs[Vector](0)
-    BLAS.axpy(w, v, s)
-    buffer(0) = s
-  }
-
-  override def bufferSchema: StructType = StructType(StructField("sum", new VectorUDT) :: Nil)
-
-  override def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
-    val s1 = buffer1.getAs[Vector](0)
-    val s2 = buffer2.getAs[Vector](0)
-    BLAS.axpy(1.0, s2, s1)
-    buffer1(0) = s1
-  }
-
-  override def initialize(buffer: MutableAggregationBuffer): Unit = {
-    buffer(0) = Vectors.zeros(numFeatures)
-  }
-
-  override def deterministic: Boolean = true
-
-  override def evaluate(buffer: Row): Any = buffer.getAs[Vector](0)
-
-  override def dataType: DataType = new VectorUDT
-}
