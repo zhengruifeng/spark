@@ -18,6 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
@@ -25,11 +26,9 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util._
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.expressions._
-import org.apache.spark.sql.functions.{col, lit, sum}
-import org.apache.spark.sql.types.{DataType, DoubleType, StructField, StructType}
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.types.DoubleType
 
 /**
  * Params for Naive Bayes Classifiers.
