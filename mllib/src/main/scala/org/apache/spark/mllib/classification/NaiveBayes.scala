@@ -28,12 +28,13 @@ import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.classification.{NaiveBayes => NewNaiveBayes}
-import org.apache.spark.ml.classification.{NaiveBayesModel => NewNaiveBayesModel}
-import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, SparseVector, Vector}
+import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.types._
 
 /**
  * Model for Naive Bayes Classifiers.
@@ -313,13 +314,13 @@ class NaiveBayes private (
     private var lambda: Double,
     private var modelType: String) extends Serializable with Logging {
 
-  import NaiveBayes.{Bernoulli, Multinomial}
+  import NaiveBayes._
 
   @Since("1.4.0")
-  def this(lambda: Double) = this(lambda, NaiveBayes.Multinomial)
+  def this(lambda: Double) = this(lambda, Multinomial)
 
   @Since("0.9.0")
-  def this() = this(1.0, NaiveBayes.Multinomial)
+  def this() = this(1.0, Multinomial)
 
   /** Set the smoothing parameter. Default: 1.0. */
   @Since("0.9.0")
@@ -340,7 +341,7 @@ class NaiveBayes private (
    */
   @Since("1.4.0")
   def setModelType(modelType: String): NaiveBayes = {
-    require(NaiveBayes.supportedModelTypes.contains(modelType),
+    require(supportedModelTypes.contains(modelType),
       s"NaiveBayes was created with an unknown modelType: $modelType.")
     this.modelType = modelType
     this
@@ -359,9 +360,8 @@ class NaiveBayes private (
   def run(data: RDD[LabeledPoint]): NaiveBayesModel = {
     val spark = SparkSession
       .builder()
+      .sparkContext(data.context)
       .getOrCreate()
-
-    import spark.implicits._
 
     val nb = new NewNaiveBayes()
       .setModelType(modelType)
@@ -371,10 +371,16 @@ class NaiveBayes private (
 
     // Input labels for [[org.apache.spark.ml.classification.NaiveBayes]] must be
     // in range [0, numClasses).
-    val dataset = data.map {
+    val fields = Array(StructField("label", DoubleType, nullable = true),
+      StructField("features", new VectorUDT, nullable = true))
+    val schema = StructType(fields)
+
+    val rowRDD = data.map {
       case LabeledPoint(label, features) =>
-        (labels.indexOf(label).toDouble, features.asML)
-    }.toDF("label", "features")
+        Row(labels.indexOf(label).toDouble, features.asML)
+    }
+
+    val dataset = spark.createDataFrame(rowRDD, schema)
 
     val newModel = nb.fit(dataset)
 

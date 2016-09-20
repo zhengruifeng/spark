@@ -156,32 +156,35 @@ class NaiveBayes @Since("1.5.0") (
 
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
+    // Aggregates term frequencies per label.
+    // TODO: Calling aggregateByKey and collect creates two stages, we can implement something
+    // TODO: similar to reduceByKeyLocally to save one stage.
     val aggregated = dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd
       .map { row => (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2)))
       }.aggregateByKey[(Double, DenseVector)]((0.0, Vectors.zeros(numFeatures).toDense))(
       seqOp = {
-         case (agg, (weight, features)) =>
+         case ((weightSum: Double, featureSum: DenseVector), (weight, features)) =>
            requireValues(features)
-           BLAS.axpy(weight, features, agg._2)
-           (agg._1 + weight, agg._2)
+           BLAS.axpy(weight, features, featureSum)
+           (weightSum + weight, featureSum)
       },
       combOp = {
-         case (agg1, agg2) =>
-           BLAS.axpy(1.0, agg2._2, agg1._2)
-           (agg1._1 + agg2._1, agg1._2)
+         case ((weightSum1, featureSum1), (weightSum2, featureSum2)) =>
+           BLAS.axpy(1.0, featureSum2, featureSum1)
+           (weightSum1 + weightSum2, featureSum1)
       }).collect().sortBy(_._1)
 
     val numLabels = aggregated.length
     val numDocuments = aggregated.map(_._2._1).sum
 
-    val pi = Array.fill[Double](numLabels)(0.0)
-    val theta = Array.fill[Double](numLabels, numFeatures)(0.0)
+    val piArray = Array.fill[Double](numLabels)(0.0)
+    val thetaArrays = Array.fill[Double](numLabels, numFeatures)(0.0)
 
     val lambda = $(smoothing)
     val piLogDenom = math.log(numDocuments + numLabels * lambda)
     var i = 0
     aggregated.foreach { case (label, (n, sumTermFreqs)) =>
-      pi(i) = math.log(n + lambda) - piLogDenom
+      piArray(i) = math.log(n + lambda) - piLogDenom
       val thetaLogDenom = $(modelType) match {
         case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
         case Bernoulli => math.log(n + 2.0 * lambda)
@@ -191,16 +194,15 @@ class NaiveBayes @Since("1.5.0") (
       }
       var j = 0
       while (j < numFeatures) {
-        theta(i)(j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
+        thetaArrays(i)(j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
         j += 1
       }
       i += 1
     }
 
-    val uid = Identifiable.randomUID("nb")
-    val piVector = Vectors.dense(pi)
-    val thetaMatrix = new DenseMatrix(numLabels, theta(0).length, theta.flatten, true)
-    new NaiveBayesModel(uid, piVector, thetaMatrix)
+    val pi = Vectors.dense(piArray)
+    val theta = new DenseMatrix(numLabels, thetaArrays(0).length, thetaArrays.flatten, true)
+    new NaiveBayesModel(uid, pi, theta)
   }
 
   @Since("1.5.0")
