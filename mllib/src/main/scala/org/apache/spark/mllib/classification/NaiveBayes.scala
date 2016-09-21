@@ -314,13 +314,11 @@ class NaiveBayes private (
     private var lambda: Double,
     private var modelType: String) extends Serializable with Logging {
 
-  import NaiveBayes._
-
   @Since("1.4.0")
-  def this(lambda: Double) = this(lambda, Multinomial)
+  def this(lambda: Double) = this(lambda, NaiveBayes.Multinomial)
 
   @Since("0.9.0")
-  def this() = this(1.0, Multinomial)
+  def this() = this(1.0, NaiveBayes.Multinomial)
 
   /** Set the smoothing parameter. Default: 1.0. */
   @Since("0.9.0")
@@ -341,7 +339,7 @@ class NaiveBayes private (
    */
   @Since("1.4.0")
   def setModelType(modelType: String): NaiveBayes = {
-    require(supportedModelTypes.contains(modelType),
+    require(NaiveBayes.supportedModelTypes.contains(modelType),
       s"NaiveBayes was created with an unknown modelType: $modelType.")
     this.modelType = modelType
     this
