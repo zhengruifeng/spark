@@ -361,6 +361,8 @@ class NaiveBayes private (
       .sparkContext(data.context)
       .getOrCreate()
 
+    import spark.implicits._
+
     val nb = new NewNaiveBayes()
       .setModelType(modelType)
       .setSmoothing(lambda)
@@ -369,16 +371,10 @@ class NaiveBayes private (
 
     // Input labels for [[org.apache.spark.ml.classification.NaiveBayes]] must be
     // in range [0, numClasses).
-    val fields = Array(StructField("label", DoubleType, nullable = true),
-      StructField("features", new VectorUDT, nullable = true))
-    val schema = StructType(fields)
-
-    val rowRDD = data.map {
+    val dataset = data.map {
       case LabeledPoint(label, features) =>
-        Row(labels.indexOf(label).toDouble, features.asML)
-    }
-
-    val dataset = spark.createDataFrame(rowRDD, schema)
+        (labels.indexOf(label).toDouble, features.asML)
+    }.toDF("label", "features")
 
     val newModel = nb.fit(dataset)
 
