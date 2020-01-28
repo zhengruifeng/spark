@@ -473,7 +473,7 @@ class KMeansSummary(ClusteringSummary):
 
 @inherit_doc
 class _KMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, HasTol,
-                    HasDistanceMeasure, HasWeightCol):
+                    HasDistanceMeasure, HasWeightCol, HasBlockSize):
     """
     Params for :py:class:`KMeans` and :py:class:`KMeansModel`.
 
@@ -540,6 +540,12 @@ class KMeansModel(JavaModel, _KMeansParams, GeneralJavaMLWritable, JavaMLReadabl
         return [c.toArray() for c in self._call_java("clusterCenters")]
 
     @property
+    @since("3.0.0")
+    def centerMatrix(self):
+        """Get the cluster centers, represented as a Matrix."""
+        return self._call_java("centerMatrix")
+
+    @property
     @since("2.1.0")
     def summary(self):
         """
@@ -581,6 +587,8 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     10
     >>> kmeans.clear(kmeans.maxIter)
     >>> model = kmeans.fit(df)
+    >>> model.getBlockSize()
+    1024
     >>> model.getDistanceMeasure()
     'euclidean'
     >>> model.setPredictionCol("newPrediction")
@@ -626,16 +634,16 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None,
-                 distanceMeasure="euclidean", weightCol=None):
+                 distanceMeasure="euclidean", weightCol=None, blockSize=4096):
         """
         __init__(self, featuresCol="features", predictionCol="prediction", k=2, \
                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
-                 distanceMeasure="euclidean", weightCol=None)
+                 distanceMeasure="euclidean", weightCol=None, blockSize=4096)
         """
         super(KMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
         self._setDefault(k=2, initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20,
-                         distanceMeasure="euclidean")
+                         distanceMeasure="euclidean", blockSize=4096)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -646,11 +654,11 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     @since("1.5.0")
     def setParams(self, featuresCol="features", predictionCol="prediction", k=2,
                   initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None,
-                  distanceMeasure="euclidean", weightCol=None):
+                  distanceMeasure="euclidean", weightCol=None, blockSize=4096):
         """
         setParams(self, featuresCol="features", predictionCol="prediction", k=2, \
                   initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
-                  distanceMeasure="euclidean", weightCol=None)
+                  distanceMeasure="euclidean", weightCol=None, blockSize=4096)
 
         Sets params for KMeans.
         """
@@ -726,6 +734,13 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
         Sets the value of :py:attr:`weightCol`.
         """
         return self._set(weightCol=value)
+
+    @since("3.0.0")
+    def setBlockSize(self, value):
+        """
+        Sets the value of :py:attr:`blockSize`.
+        """
+        return self._set(blockSize=value)
 
 
 @inherit_doc

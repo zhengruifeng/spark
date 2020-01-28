@@ -23,13 +23,11 @@ import org.dmg.pmml.PMML
 import org.dmg.pmml.clustering.ClusteringModel
 
 import org.apache.spark.SparkException
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{Matrices, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils, PMMLReadWriteTest}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans,
-  KMeansModel => MLlibKMeansModel}
-import org.apache.spark.mllib.linalg.{Vectors => MLlibVectors}
+import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans}
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
 private[clustering] case class TestRow(features: Vector)
@@ -228,11 +226,10 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
 
   test("pmml export") {
     val clusterCenters = Array(
-      MLlibVectors.dense(1.0, 2.0, 6.0),
-      MLlibVectors.dense(1.0, 3.0, 0.0),
-      MLlibVectors.dense(1.0, 4.0, 6.0))
-    val oldKmeansModel = new MLlibKMeansModel(clusterCenters)
-    val kmeansModel = new KMeansModel("", oldKmeansModel)
+      Vectors.dense(1.0, 2.0, 6.0),
+      Vectors.dense(1.0, 3.0, 0.0),
+      Vectors.dense(1.0, 4.0, 6.0))
+    val kmeansModel = new KMeansModel("", Matrices.fromVectors(clusterCenters))
     def checkModel(pmml: PMML): Unit = {
       // Check the header description is what we expect
       assert(pmml.getHeader.getDescription === "k-means clustering")
@@ -477,6 +474,18 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     model2.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
 
     assert(model1.clusterCenters === model2.clusterCenters)
+  }
+
+  test("Load KMeansModel prior to Spark 3.0") {
+    val kmeansPath = testFile("ml-models/kmeans-2.4.4")
+    val model = KMeansModel.load(kmeansPath)
+    assert(model.getK === 2)
+    assert(model.getSeed === 1L)
+    assert(model.centerMatrix === Matrices.dense(2, 3, Array(0.1, 9.1, 0.1, 9.1, 0.1, 9.1)))
+
+    val metadata = spark.read.json(s"$kmeansPath/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr == "2.4.4")
   }
 }
 
