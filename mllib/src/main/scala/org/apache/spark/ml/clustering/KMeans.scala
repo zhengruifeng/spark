@@ -113,7 +113,7 @@ class KMeansModel private[ml] (
   @transient private lazy val negSquaredNormsVec = {
     $(distanceMeasure) match {
       case EUCLIDEAN =>
-        val negSquaredNorms = centerMatrix.rowIter.map(center => - BLAS.dot(center, center))
+        val negSquaredNorms = centerMatrix.rowIter.map(center => -BLAS.dot(center, center))
         new DenseVector(negSquaredNorms.toArray)
       case COSINE => null
     }
@@ -243,7 +243,7 @@ private class PMMLKMeansModelWriter extends MLWriterFormat with MLFormatRegister
         instance.getDistanceMeasure, instance.summary.trainingCost, instance.summary.numIter)
     } else {
       new OldKMeansModel(instance.clusterCenters.map(OldVectors.fromML),
-        instance.getDistanceMeasure, Double.NaN, -1)
+        instance.getDistanceMeasure, 0.0, -1)
     }
     oldModel.toPMML(sc, path)
   }
