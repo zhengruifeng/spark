@@ -420,7 +420,7 @@ class KMeans @Since("1.5.0") (
       // Find the new centers
       val bcCenters = sc.broadcast(centers)
       val agg = blocks.treeAggregate(new KMeansAggregator(bcCenters,
-        $(k), numFeatures, $(distanceMeasure)))(
+        $(k), numFeatures, $(blockSize), $(distanceMeasure)))(
         seqOp = (c, b) => c.add(b),
         combOp = (c1, c2) => c1.merge(c2),
         depth = 2)
@@ -571,6 +571,7 @@ private class KMeansAggregator (
     val bcCenters: Broadcast[InstanceBlock],
     val k: Int,
     val numFeatures: Int,
+    val blockSize: Int,
     val distanceMeasure: String) extends Serializable {
   import KMeans.{EUCLIDEAN, COSINE}
 
@@ -586,6 +587,9 @@ private class KMeansAggregator (
 
   @transient private lazy val centerMat =
     bcCenters.value.matrix.toDense
+
+  @transient private lazy val auxiliaryMat =
+    new DenseMatrix(blockSize, k, Array.ofDim[Double](blockSize * k))
 
   def add(block: InstanceBlock): this.type = {
     require(numFeatures == block.numFeatures, s"Dimensions mismatch when adding new " +
@@ -612,7 +616,11 @@ private class KMeansAggregator (
     val localCenters = bcCenters.value
 
     // mat here represents squared norms or cosine distance
-    val mat = new DenseMatrix(size, k, Array.ofDim[Double](size * k))
+    val mat = if (size == blockSize) {
+      auxiliaryMat
+    } else {
+      new DenseMatrix(size, k, Array.ofDim[Double](size * k))
+    }
 
     var i = 0
     var j = 0
@@ -672,7 +680,11 @@ private class KMeansAggregator (
     val size = block.size
 
     // mat here represents cosine (NOT COSINE-DISTANCE!)
-    val mat = new DenseMatrix(size, k, Array.ofDim[Double](size * k))
+    val mat = if (size == blockSize) {
+      auxiliaryMat
+    } else {
+      new DenseMatrix(size, k, Array.ofDim[Double](size * k))
+    }
 
     BLAS.gemm(1.0, block.matrix, centerMat.transpose, 0.0, mat)
 
