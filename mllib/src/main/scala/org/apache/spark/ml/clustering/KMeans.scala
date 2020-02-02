@@ -24,7 +24,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
-import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -106,7 +105,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 @Since("1.5.0")
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    @Since("3.0.0") val centerMatrix: Matrix)
+    @Since("3.1.0") val centerMatrix: Matrix)
   extends Model[KMeansModel] with KMeansParams with GeneralMLWritable
     with HasTrainingSummary[KMeansSummary] {
   import KMeans.{EUCLIDEAN, COSINE}
@@ -371,7 +370,7 @@ class KMeans @Since("1.5.0") (
    *
    * @group expertSetParam
    */
-  @Since("3.0.0")
+  @Since("3.1.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
 
   @Since("2.0.0")
@@ -386,11 +385,11 @@ class KMeans @Since("1.5.0") (
     val sc = dataset.sparkSession.sparkContext
 
     val initStartTime = System.nanoTime
-    var centers = initialize(dataset)
+    var centerMatrix = initialize(dataset)
     val initTimeInSeconds = (System.nanoTime - initStartTime) / 1e9
     logInfo(f"Initialization with ${$(initMode)} took $initTimeInSeconds%.3f seconds.")
 
-    val numFeatures = centers.numFeatures
+    val numFeatures = centerMatrix.numCols
     instr.logNumFeatures(numFeatures)
 
     val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
@@ -398,15 +397,35 @@ class KMeans @Since("1.5.0") (
     } else {
       lit(1.0)
     }
-    val centroidFunc = KMeans.getCentroidFunc($(distanceMeasure))
-    val distanceFunc = KMeans.getDistanceFunc($(distanceMeasure))
-    val instances = dataset.select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w).rdd
-      .map { case Row(features: Vector, weight: Double) =>
-        centroidFunc(features, weight)
-      }
 
-    val blocks = InstanceBlock.blokify(instances, $(blockSize))
-      .persist(StorageLevel.MEMORY_AND_DISK)
+    val instances = dataset.select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w).rdd
+      .map { case Row(features: Vector, weight: Double) => (features, weight) }
+
+    val localBlockSize = $(blockSize)
+    val blocks = $(distanceMeasure) match {
+      case EUCLIDEAN =>
+        instances.mapPartitions { iter =>
+          iter.map { case (features, weight) =>
+            val squaredNorms = BLAS.dot(features, features)
+            (squaredNorms, weight, features)
+          }.grouped(localBlockSize).map { seq =>
+            (seq.map(_._1).toArray, seq.map(_._2).toArray, Matrices.fromVectors(seq.map(_._3)))
+          }
+        }
+      case COSINE =>
+        instances.mapPartitions { iter =>
+          iter.map { case (features, weight) =>
+            val norm = Vectors.norm(features, 2)
+            require(norm > 0, "Cosine distance is not defined for zero-length vectors.")
+            BLAS.scal(1.0 / norm, features)
+            (weight, features)
+          }.grouped(localBlockSize).map { seq =>
+            (Array.emptyDoubleArray, seq.map(_._1).toArray, Matrices.fromVectors(seq.map(_._2)))
+          }
+        }
+    }
+
+    blocks.persist(StorageLevel.MEMORY_AND_DISK)
       .setName(s"training dataset (blockSize=${$(blockSize)})")
 
     var converged = false
@@ -418,7 +437,7 @@ class KMeans @Since("1.5.0") (
     // Execute iterations of Lloyd's algorithm until converged
     while (iteration < $(maxIter) && !converged) {
       // Find the new centers
-      val bcCenters = sc.broadcast(centers)
+      val bcCenters = sc.broadcast(centerMatrix)
       val agg = blocks.treeAggregate(new KMeansAggregator(bcCenters,
         $(k), numFeatures, $(blockSize), $(distanceMeasure)))(
         seqOp = (c, b) => c.add(b),
@@ -431,14 +450,12 @@ class KMeans @Since("1.5.0") (
         instr.logSumOfWeights(agg.weightSum)
       }
 
-      val newCenters = agg.centroid
+      val (newCenters, distances) = agg.result
 
       // Update the cluster centers and costs
-      converged = centers.matrix.rowIter
-        .zip(newCenters.matrix.rowIter)
-        .forall { case (v1, v2) => distanceFunc(v1, v2) <= $(tol) }
+      converged = distances.forall(_ <= $(tol))
       cost = agg.costSum
-      centers = newCenters
+      centerMatrix = newCenters
 
       iteration += 1
     }
@@ -454,7 +471,7 @@ class KMeans @Since("1.5.0") (
 
     logInfo(s"The cost is $cost.")
 
-    val model = copyValues(new KMeansModel(uid, centers.matrix).setParent(this))
+    val model = copyValues(new KMeansModel(uid, centerMatrix).setParent(this))
     val summary = new KMeansSummary(
       model.transform(dataset),
       $(predictionCol),
@@ -468,7 +485,7 @@ class KMeans @Since("1.5.0") (
     model
   }
 
-  private def initialize(dataset: Dataset[_]): InstanceBlock = {
+  private def initialize(dataset: Dataset[_]): Matrix = {
     val algo = new OldKMeans()
       .setK($(k))
       .setInitializationMode($(initMode))
@@ -482,10 +499,8 @@ class KMeans @Since("1.5.0") (
       .rdd
       .map { case Row(features: Vector) => OldVectors.fromML(features) }
 
-    val instances = algo.initialize(vectors)
-      .map(_.asML)
-      .map { vec => Instance(BLAS.dot(vec, vec), 1.0, vec) }
-    InstanceBlock.fromInstances(instances)
+    val instances = algo.initialize(vectors).map(_.asML)
+    Matrices.fromVectors(instances)
   }
 
   @Since("1.5.0")
@@ -513,36 +528,6 @@ object KMeans extends DefaultParamsReadable[KMeans] {
 
   /** String name for cosine distance. */
   private[clustering] val COSINE = "cosine"
-
-  private[clustering] def getCentroidFunc(distanceMeasure: String) = {
-    distanceMeasure match {
-      case EUCLIDEAN =>
-        (vec: Vector, w: Double) =>
-          val squaredNorm = BLAS.dot(vec, vec)
-          Instance(squaredNorm, w, vec)
-      case COSINE =>
-        (vec: Vector, w: Double) =>
-          val norm = Vectors.norm(vec, 2)
-          require(norm > 0, "Cosine distance is not defined for zero-length vectors.")
-          BLAS.scal(1.0 / norm, vec)
-          Instance(1.0, w, vec)
-    }
-  }
-
-  private def getDistanceFunc(distanceMeasure: String) = {
-    distanceMeasure match {
-      case EUCLIDEAN =>
-        (v1: Vector, v2: Vector) =>
-          math.sqrt(Vectors.sqdist(v1, v2))
-      case COSINE =>
-        (v1: Vector, v2: Vector) =>
-          val norm1 = Vectors.norm(v1, 2)
-          val norm2 = Vectors.norm(v2, 2)
-          require(norm1 > 0 && norm2 > 0,
-            "Cosine distance is not defined for zero-length vectors.")
-          1 - BLAS.dot(v1, v2) / norm1 / norm2
-    }
-  }
 }
 
 /**
@@ -568,7 +553,7 @@ class KMeansSummary private[clustering] (
 
 
 private class KMeansAggregator (
-    val bcCenters: Broadcast[InstanceBlock],
+    val bcCenters: Broadcast[Matrix],
     val k: Int,
     val numFeatures: Int,
     val blockSize: Int,
@@ -586,34 +571,48 @@ private class KMeansAggregator (
   def weightSum: Double = weightSumVec.values.sum
 
   @transient private lazy val centerMat =
-    bcCenters.value.matrix.toDense
+    bcCenters.value.toDense
+
+  @transient private lazy val centerSquaredNorms = {
+    distanceMeasure match {
+      case EUCLIDEAN =>
+        val k = centerMat.numRows
+        val getNonZeroIter = this.getNonZeroIter(centerMat)
+        Array.tabulate(k)(i => getNonZeroIter(i).map(t => t._2 * t._2).sum)
+      case COSINE => null
+    }
+  }
 
   @transient private lazy val auxiliaryMat =
     new DenseMatrix(blockSize, k, Array.ofDim[Double](blockSize * k))
 
-  def add(block: InstanceBlock): this.type = {
-    require(numFeatures == block.numFeatures, s"Dimensions mismatch when adding new " +
-      s"instance. Expecting $numFeatures but got ${block.numFeatures}.")
-    require(block.weightIter.forall(_ >= 0),
-      s"instance weights ${block.weightIter.mkString("[", ",", "]")} has to be >= 0.0")
+  def add(block: (Array[Double], Array[Double], Matrix)): this.type = {
+    val (squaredNorms, weights, matrix) = block
+    require(numFeatures == matrix.numCols, s"Dimensions mismatch when adding new " +
+      s"instance. Expecting $numFeatures but got ${matrix.numCols}.")
+    require(weights.forall(_ >= 0),
+      s"instance weights ${weights.mkString("[", ",", "]")} has to be >= 0.0")
 
-    val size = block.size
+    val size = matrix.numRows
     count += size
-    if (block.weightIter.forall(_ == 0)) return this
+    if (block._2.forall(_ == 0)) return this
 
     distanceMeasure match {
       case EUCLIDEAN =>
-        euclideanUpdateInPlace(block)
+        euclideanUpdateInPlace(squaredNorms, weights, matrix)
       case COSINE =>
-        cosineUpdateInPlace(block)
+        cosineUpdateInPlace(weights, matrix)
     }
 
     this
   }
 
-  private def euclideanUpdateInPlace(block: InstanceBlock): Unit = {
-    val size = block.size
-    val localCenters = bcCenters.value
+  private def euclideanUpdateInPlace(
+      squaredNorms: Array[Double],
+      weights: Array[Double],
+      matrix: Matrix): Unit = {
+    val size = matrix.numRows
+    val localCenterSquaredNorms = centerSquaredNorms
 
     // mat here represents squared norms or cosine distance
     val mat = if (size == blockSize) {
@@ -626,25 +625,26 @@ private class KMeansAggregator (
     var j = 0
     while (i < size) {
       j = 0
-      val instanceSquaredNorm = block.getLabel(i)
+      val instanceSquaredNorm = squaredNorms(i)
       while (j < k) {
-        val centerSquaredNorm = localCenters.getLabel(j)
+        val centerSquaredNorm = localCenterSquaredNorms(j)
         mat.values(i + j * size) = instanceSquaredNorm + centerSquaredNorm
         j += 1
       }
       i += 1
     }
 
-    BLAS.gemm(-2.0, block.matrix, centerMat.transpose, 1.0, mat)
+    BLAS.gemm(-2.0, matrix, centerMat.transpose, 1.0, mat)
 
     // in-place convert squared euclidean distances to weights dispatched to each center
     // find the closest center and update costs and sums
+    val getNonZeroIter = this.getNonZeroIter(matrix)
     val localWeightSumVec = weightSumVec
     val localSumMat = sumMat
     i = 0
     j = 0
     while (i < size) {
-      val weight = block.getWeight(i)
+      val weight = weights(i)
       if (weight > 0) {
         var bestIndex = 0
         var bestSquaredDistance = Double.PositiveInfinity
@@ -661,11 +661,11 @@ private class KMeansAggregator (
         costSum += weight * bestSquaredDistance
         localWeightSumVec.values(bestIndex) += weight
         if (weight == 1) {
-          block.getNonZeroIter(i).foreach { case (j, v) =>
+          getNonZeroIter(i).foreach { case (j, v) =>
             localSumMat.values(bestIndex + j * k) += v
           }
         } else {
-          block.getNonZeroIter(i).foreach { case (j, v) =>
+          getNonZeroIter(i).foreach { case (j, v) =>
             localSumMat.values(bestIndex + j * k) += v * weight
           }
         }
@@ -676,8 +676,10 @@ private class KMeansAggregator (
   }
 
 
-  private def cosineUpdateInPlace(block: InstanceBlock): Unit = {
-    val size = block.size
+  private def cosineUpdateInPlace(
+      weights: Array[Double],
+      matrix: Matrix): Unit = {
+    val size = matrix.numRows
 
     // mat here represents cosine (NOT COSINE-DISTANCE!)
     val mat = if (size == blockSize) {
@@ -686,16 +688,17 @@ private class KMeansAggregator (
       new DenseMatrix(size, k, Array.ofDim[Double](size * k))
     }
 
-    BLAS.gemm(1.0, block.matrix, centerMat.transpose, 0.0, mat)
+    BLAS.gemm(1.0, matrix, centerMat.transpose, 0.0, mat)
 
     // in-place convert cosine to weights dispatched to each center
     // find the closest center and update costs and sums
+    val getNonZeroIter = this.getNonZeroIter(matrix)
     val localWeightSumVec = weightSumVec
     val localSumMat = sumMat
     var i = 0
     var j = 0
     while (i < size) {
-      val weight = block.getWeight(i)
+      val weight = weights(i)
       if (weight > 0) {
         var bestIndex = 0
         var bestDistance = Double.PositiveInfinity
@@ -712,16 +715,38 @@ private class KMeansAggregator (
         costSum += weight * bestDistance
         localWeightSumVec.values(bestIndex) += weight
         if (weight == 1) {
-          block.getNonZeroIter(i).foreach { case (j, v) =>
+          getNonZeroIter(i).foreach { case (j, v) =>
             localSumMat.values(bestIndex + j * k) += v
           }
         } else {
-          block.getNonZeroIter(i).foreach { case (j, v) =>
+          getNonZeroIter(i).foreach { case (j, v) =>
             localSumMat.values(bestIndex + j * k) += v * weight          }
         }
       }
 
       i += 1
+    }
+  }
+
+
+  // directly get the non-zero iterator of i-th row vector without array copy or slice
+  private def getNonZeroIter(matrix: Matrix): Int => Iterator[(Int, Double)] = {
+    require(matrix.isTransposed)
+    matrix match {
+      case dm: DenseMatrix =>
+        val numFeatures = dm.numCols
+        (i: Int) =>
+          val start = numFeatures * i
+          Iterator.tabulate(numFeatures)(j =>
+            (j, dm.values(start + j))
+          ).filter(_._2 != 0)
+      case sm: SparseMatrix =>
+        (i: Int) =>
+          val start = sm.colPtrs(i)
+          val end = sm.colPtrs(i + 1)
+          Iterator.tabulate(end - start)(j =>
+            (sm.rowIndices(start + j), sm.values(start + j))
+          ).filter(_._2 != 0)
     }
   }
 
@@ -736,21 +761,43 @@ private class KMeansAggregator (
     this
   }
 
-  def centroid: InstanceBlock = {
-    val centroidFunc = KMeans.getCentroidFunc(distanceMeasure)
-    val prevCenters = bcCenters.value
-    val instanceIter = sumMat.rowIter
-      .zip(weightSumVec.values.iterator)
-      .zip(prevCenters.matrix.rowIter)
-      .map { case ((sumVec, weightSum), prevCenter) =>
-        if (weightSum > 0) {
-          BLAS.scal(1.0 / weightSum, sumVec)
-          centroidFunc(sumVec, 1.0)
-        } else {
-          centroidFunc(prevCenter, 1.0)
-        }
-      }
+  def result: (Matrix, Array[Double]) = {
+    val distanceFunc = distanceMeasure match {
+      case EUCLIDEAN =>
+        (v1: Vector, v2: Vector) => math.sqrt(Vectors.sqdist(v1, v2))
+      case COSINE =>
+        (v1: Vector, v2: Vector) =>
+          val norm1 = Vectors.norm(v1, 2)
+          val norm2 = Vectors.norm(v2, 2)
+          require(norm1 > 0 && norm2 > 0,
+            "Cosine distance is not defined for zero-length vectors.")
+          1 - BLAS.dot(v1, v2) / norm1 / norm2
+    }
 
-    InstanceBlock.fromInstances(instanceIter.toSeq)
+    val prevCenters = bcCenters.value
+    val newCenters = sumMat.rowIter
+      .zip(weightSumVec.values.iterator)
+      .zip(prevCenters.rowIter)
+      .map { case ((sumVec, weightSum), prevCenter) =>
+        val newCenter = if (weightSum > 0) {
+          BLAS.scal(1.0 / weightSum, sumVec)
+          sumVec
+        } else {
+          prevCenter.copy
+        }
+
+        distanceMeasure match {
+          case COSINE =>
+            val norm = Vectors.norm(newCenter, 2)
+            require(norm > 0, "Cosine distance is not defined for zero-length vectors.")
+            BLAS.scal(1.0 / norm, newCenter)
+          case EUCLIDEAN =>
+        }
+
+        val distance = distanceFunc(newCenter, prevCenter)
+        (newCenter, distance)
+      }.toArray
+
+    (Matrices.fromVectors(newCenters.map(_._1)), newCenters.map(_._2))
   }
 }

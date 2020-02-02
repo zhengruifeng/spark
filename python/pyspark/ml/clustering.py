@@ -735,7 +735,7 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
         """
         return self._set(weightCol=value)
 
-    @since("3.0.0")
+    @since("3.1.0")
     def setBlockSize(self, value):
         """
         Sets the value of :py:attr:`blockSize`.
