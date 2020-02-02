@@ -476,7 +476,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(model1.clusterCenters === model2.clusterCenters)
   }
 
-  test("Load KMeansModel prior to Spark 3.0") {
+  test("Load KMeansModel prior to Spark 3.1") {
     val kmeansPath = testFile("ml-models/kmeans-2.4.4")
     val model = KMeansModel.load(kmeansPath)
     assert(model.getK === 2)

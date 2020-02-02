@@ -634,16 +634,16 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None,
-                 distanceMeasure="euclidean", weightCol=None, blockSize=4096):
+                 distanceMeasure="euclidean", weightCol=None, blockSize=1024):
         """
         __init__(self, featuresCol="features", predictionCol="prediction", k=2, \
                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
-                 distanceMeasure="euclidean", weightCol=None, blockSize=4096)
+                 distanceMeasure="euclidean", weightCol=None, blockSize=1024)
         """
         super(KMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
         self._setDefault(k=2, initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20,
-                         distanceMeasure="euclidean", blockSize=4096)
+                         distanceMeasure="euclidean", blockSize=1024)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -654,11 +654,11 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     @since("1.5.0")
     def setParams(self, featuresCol="features", predictionCol="prediction", k=2,
                   initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None,
-                  distanceMeasure="euclidean", weightCol=None, blockSize=4096):
+                  distanceMeasure="euclidean", weightCol=None, blockSize=1024):
         """
         setParams(self, featuresCol="features", predictionCol="prediction", k=2, \
                   initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
-                  distanceMeasure="euclidean", weightCol=None, blockSize=4096)
+                  distanceMeasure="euclidean", weightCol=None, blockSize=1024)
 
         Sets params for KMeans.
         """
