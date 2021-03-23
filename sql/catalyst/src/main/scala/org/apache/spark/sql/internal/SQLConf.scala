@@ -382,6 +382,12 @@ object SQLConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10MB")
 
+  val BROADCASTSORTJOIN_SUBSTITUTE_ENABLED = buildConf("spark.sql.broadcastSortJoin.substitute")
+    .doc("When true and isNullAwareAntiJoin is false, use BSJ instead of BHJ for test.")
+    .version("3.2.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val LIMIT_SCALE_UP_FACTOR = buildConf("spark.sql.limit.scaleUpFactor")
     .internal()
     .doc("Minimal increase rate in number of partitions between attempts when executing a take " +

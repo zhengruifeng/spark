@@ -176,6 +176,28 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
+        def createBroadcastSortJoin(onlyLookingAtHint: Boolean) = {
+          getBroadcastBuildSide(left, right, joinType, hint, onlyLookingAtHint, conf).map {
+            buildSide =>
+              Seq(joins.BroadcastSortJoinExec(
+                leftKeys,
+                rightKeys,
+                joinType,
+                buildSide,
+                nonEquiCond,
+                planLater(left),
+                planLater(right)))
+          }
+        }
+
+        def createBroadcastJoin(onlyLookingAtHint: Boolean) = {
+          if (conf.getConf(SQLConf.BROADCASTSORTJOIN_SUBSTITUTE_ENABLED)) {
+            createBroadcastSortJoin(onlyLookingAtHint)
+          } else {
+            createBroadcastHashJoin(onlyLookingAtHint)
+          }
+        }
+
         def createShuffleHashJoin(onlyLookingAtHint: Boolean) = {
           getShuffleHashJoinBuildSide(left, right, joinType, hint, onlyLookingAtHint, conf).map {
             buildSide =>
@@ -210,7 +232,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createJoinWithoutHint() = {
-          createBroadcastHashJoin(false)
+          createBroadcastJoin(false)
             .orElse {
               if (!conf.preferSortMergeJoin) {
                 createShuffleHashJoin(false)
@@ -228,7 +250,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
         }
 
-        createBroadcastHashJoin(true)
+        createBroadcastJoin(true)
           .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
           .orElse(createShuffleHashJoin(true))
           .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }

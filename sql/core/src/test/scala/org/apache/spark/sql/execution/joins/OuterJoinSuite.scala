@@ -137,6 +137,25 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
       }
     }
 
+    if (joinType != FullOuter) {
+      testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastSortJoinExec") { _ =>
+        val buildSide = joinType match {
+          case LeftOuter => BuildRight
+          case RightOuter => BuildLeft
+          case _ => fail(s"Unsupported join type $joinType")
+        }
+        extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+            checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+              BroadcastSortJoinExec(leftKeys, rightKeys, joinType, buildSide,
+                boundCondition, left, right),
+              expectedAnswer.map(Row.fromTuple),
+              sortAnswers = true)
+          }
+        }
+      }
+    }
+
     test(s"$testName using SortMergeJoin") {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {

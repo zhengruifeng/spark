@@ -79,6 +79,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
       case j: BroadcastHashJoinExec => j
+      case j: BroadcastSortJoinExec => j
       case j: ShuffledHashJoinExec => j
       case j: CartesianProductExec => j
       case j: BroadcastNestedLoopJoinExec => j
@@ -94,7 +95,6 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 
   test("join operator selection") {
     spark.sharedState.cacheManager.clearCache()
-
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       Seq(
@@ -158,6 +158,21 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     ).foreach(assertJoin)
   }
 
+  test("broadcasted sort join operator selection") {
+    spark.sharedState.cacheManager.clearCache()
+    withSQLConf(SQLConf.BROADCASTSORTJOIN_SUBSTITUTE_ENABLED.key -> "true") {
+      sql("CACHE TABLE testData")
+      Seq(
+        ("SELECT * FROM testData join testData2 ON key = a",
+          classOf[BroadcastSortJoinExec]),
+        ("SELECT * FROM testData join testData2 ON key = a and key = 2",
+          classOf[BroadcastSortJoinExec]),
+        ("SELECT * FROM testData join testData2 ON key = a where key = 2",
+          classOf[BroadcastSortJoinExec])
+      ).foreach(assertJoin)
+    }
+  }
+
   test("broadcasted hash outer join operator selection") {
     spark.sharedState.cacheManager.clearCache()
     sql("CACHE TABLE testData")
@@ -170,6 +185,22 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
         classOf[BroadcastHashJoinExec])
     ).foreach(assertJoin)
+  }
+
+  test("broadcasted sort outer join operator selection") {
+    spark.sharedState.cacheManager.clearCache()
+    withSQLConf(SQLConf.BROADCASTSORTJOIN_SUBSTITUTE_ENABLED.key -> "true") {
+      sql("CACHE TABLE testData")
+      sql("CACHE TABLE testData2")
+      Seq(
+        ("SELECT * FROM testData LEFT JOIN testData2 ON key = a",
+          classOf[BroadcastSortJoinExec]),
+        ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
+          classOf[BroadcastSortJoinExec]),
+        ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
+          classOf[BroadcastSortJoinExec])
+      ).foreach(assertJoin)
+    }
   }
 
   test("multiple-key equi-join is hash-join") {

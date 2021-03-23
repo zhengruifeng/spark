@@ -104,6 +104,24 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
       EnsureRequirements.apply(broadcastJoin)
     }
 
+    def makeBroadcastSortJoin(
+        leftKeys: Seq[Expression],
+        rightKeys: Seq[Expression],
+        boundCondition: Option[Expression],
+        leftPlan: SparkPlan,
+        rightPlan: SparkPlan,
+        side: BuildSide) = {
+      val broadcastSortJoin = joins.BroadcastSortJoinExec(
+        leftKeys,
+        rightKeys,
+        Inner,
+        side,
+        boundCondition,
+        leftPlan,
+        rightPlan)
+      EnsureRequirements.apply(broadcastSortJoin)
+    }
+
     def makeShuffledHashJoin(
         leftKeys: Seq[Expression],
         rightKeys: Seq[Expression],
@@ -146,6 +164,30 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
             makeBroadcastHashJoin(
+              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, BuildRight),
+            expectedAnswer.map(Row.fromTuple),
+            sortAnswers = true)
+        }
+      }
+    }
+
+    testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastSortJoin (build=left)") { _ =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+          checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
+            makeBroadcastSortJoin(
+              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, BuildLeft),
+            expectedAnswer.map(Row.fromTuple),
+            sortAnswers = true)
+        }
+      }
+    }
+
+    testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastSortJoin (build=right)") { _ =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+          checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
+            makeBroadcastSortJoin(
               leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, BuildRight),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
