@@ -298,7 +298,7 @@ class GBTRegressionModel private[ml](
     // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
     // Classifies by thresholding sum of weighted tree predictions
     val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
-    BLAS.nativeBLAS.ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
+    BLAS.getBLAS(getNumTrees).ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
   }
 
   @Since("1.4.0")

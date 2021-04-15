@@ -1274,13 +1274,14 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     // This appears to create factorizations that have a slightly better reconstruction
     // (<1%) compared picking elements uniformly at random in [0,1].
     inBlocks.mapPartitions({ iter =>
+      val blas = BLAS.getBLAS(rank)
       iter.map {
         case (srcBlockId, inBlock) =>
           val random = new XORShiftRandom(byteswap64(seed ^ srcBlockId))
           val factors = Array.fill(inBlock.srcIds.length) {
             val factor = Array.fill(rank)(random.nextGaussian().toFloat)
-            val nrm = BLAS.nativeBLAS.snrm2(rank, factor, 1)
-            BLAS.nativeBLAS.sscal(rank, 1.0f / nrm, factor, 1)
+            val nrm = blas.snrm2(rank, factor, 1)
+            blas.sscal(rank, 1.0f / nrm, factor, 1)
             factor
           }
           (srcBlockId, factors)

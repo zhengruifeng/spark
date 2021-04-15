@@ -454,9 +454,10 @@ class DenseMatrix @Since("2.0.0") (
 
   override def colIter: Iterator[Vector] = {
     if (isTransposed) {
+      val blas = BLAS.getBLAS(numRows)
       Iterator.tabulate(numCols) { j =>
         val col = new Array[Double](numRows)
-        BLAS.nativeBLAS.dcopy(numRows, values, j, numCols, col, 0, 1)
+        blas.dcopy(numRows, values, j, numCols, col, 0, 1)
         new DenseVector(col)
       }
     } else {

@@ -26,7 +26,7 @@ private[spark] object BLAS extends Serializable {
 
   @transient private var _javaBLAS: NetlibBLAS = _
   @transient private var _nativeBLAS: NetlibBLAS = _
-  private val nativeL1Threshold: Int = 256
+  private val nativeL1Threshold: Int = 512
 
   // For level-1 function dspmv, use javaBLAS for better performance.
   private[ml] def javaBLAS: NetlibBLAS = {

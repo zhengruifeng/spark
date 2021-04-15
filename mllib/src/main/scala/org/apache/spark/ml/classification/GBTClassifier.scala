@@ -370,7 +370,7 @@ class GBTClassificationModel private[ml](
   /** Raw prediction for the positive class. */
   private def margin(features: Vector): Double = {
     val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
-    BLAS.nativeBLAS.ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
+    BLAS.getBLAS(getNumTrees).ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
   }
 
   /** (private[ml]) Convert to a model in the old API */
