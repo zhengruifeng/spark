@@ -200,6 +200,28 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //      other choice.
       case j @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, nonEquiCond,
           _, left, right, hint) =>
+
+        def createBroadcastSortMergeJoin(onlyLookingAtHint: Boolean) = {
+          if (RowOrdering.isOrderable(leftKeys)) {
+            val buildSide = getBroadcastBuildSide(
+              left, right, joinType, hint, onlyLookingAtHint, conf)
+            checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, true)
+            buildSide.map {
+              buildSide =>
+                Seq(joins.BroadcastSortMergeJoinExec(
+                  leftKeys,
+                  rightKeys,
+                  joinType,
+                  buildSide,
+                  nonEquiCond,
+                  planLater(left),
+                  planLater(right)))
+            }
+          } else {
+            None
+          }
+        }
+
         def createBroadcastHashJoin(onlyLookingAtHint: Boolean) = {
           val buildSide = getBroadcastBuildSide(
             left, right, joinType, hint, onlyLookingAtHint, conf)
@@ -254,7 +276,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createJoinWithoutHint() = {
-          createBroadcastHashJoin(false)
+          createBroadcastSortMergeJoin(false)
+            .orElse(createBroadcastHashJoin(false))
             .orElse(createShuffleHashJoin(false))
             .orElse(createSortMergeJoin())
             .orElse(createCartesianProduct())
@@ -269,7 +292,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         if (hint.isEmpty) {
           createJoinWithoutHint()
         } else {
-          createBroadcastHashJoin(true)
+          createBroadcastSortMergeJoin(true)
+            .orElse(createBroadcastHashJoin(true))
             .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
             .orElse(createShuffleHashJoin(true))
             .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
