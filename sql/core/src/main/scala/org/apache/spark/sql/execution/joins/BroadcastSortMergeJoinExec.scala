@@ -76,9 +76,9 @@ case class BroadcastSortMergeJoinExec(
 
   override def requiredChildDistribution: Seq[Distribution] = buildSide match {
     case BuildLeft =>
-      AllTuples :: UnspecifiedDistribution :: Nil
+      OrderedDistribution(requiredOrders(leftKeys)) :: UnspecifiedDistribution :: Nil
     case BuildRight =>
-      UnspecifiedDistribution :: AllTuples :: Nil
+      UnspecifiedDistribution :: OrderedDistribution(requiredOrders(rightKeys)) :: Nil
   }
 
   override def outputPartitioning: Partitioning = joinType match {
@@ -91,20 +91,12 @@ case class BroadcastSortMergeJoinExec(
 
   private lazy val recombinedBuildRDD = {
     val buildRDD = _buildPlan.execute().map(_.copy())
-    assert(buildRDD.getNumPartitions == 1)
     buildRDD.persist(StorageLevel.MEMORY_AND_DISK_SER_2)
+    val numInputPartitions = buildRDD.getNumPartitions
 
-    val numPartitions = _streamedPlan.execute().getNumPartitions
-    var numDuplicated = math.sqrt(numPartitions).ceil.toInt
-    numDuplicated = math.max(numDuplicated, 2)
-    numDuplicated = math.min(numDuplicated, 16)
-    numDuplicated = math.min(numDuplicated, numPartitions)
-    val duplicatedBuildRDD =
-      new PartitionRecombinedRDD(buildRDD, Array.fill(numDuplicated)(Array(0)))
-    duplicatedBuildRDD.persist(StorageLevel.MEMORY_AND_DISK_SER)
-
-    new PartitionRecombinedRDD(duplicatedBuildRDD,
-      Array.tabulate(numPartitions)(i => Array(i % numDuplicated)))
+    val numOutputPartitions = _streamedPlan.execute().getNumPartitions
+    new PartitionRecombinedRDD(buildRDD,
+      Array.fill(numOutputPartitions)(Array.range(0, numInputPartitions)))
   }
 
   private lazy val (leftRDD, rightRDD) = buildSide match {
