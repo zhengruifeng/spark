@@ -70,6 +70,8 @@ class SampledPlotBase:
         from pyspark.pandas import DataFrame, Series
 
         fraction = get_option("plotting.sample_ratio")
+
+
         if fraction is None:
             fraction = 1 / (len(data) / get_option("plotting.max_rows"))
             fraction = min(1.0, fraction)
@@ -78,8 +80,18 @@ class SampledPlotBase:
         if isinstance(data, (DataFrame, Series)):
             if isinstance(data, Series):
                 data = data.to_frame()
-            sampled = data._internal.resolved_copy.spark_frame.sample(fraction=self.fraction)
-            return DataFrame(data._internal.with_new_sdf(sampled))._to_pandas()
+
+            fraction = get_option("plotting.sample_ratio")
+            if fraction is None:
+                max_rows = get_option("plotting.max_rows")
+                tmp_rand_col = "__tmp_rand_col__"
+                sampled = data._internal.resolved_copy.spark_frame.withColumn(tmp_rand_col, F.rand()).sort(tmp_rand_col).limit(max_rows)
+            else:
+                self.fraction = fraction
+                sampled = data._internal.resolved_copy.spark_frame.sample(fraction=self.fraction)
+
+            pdf = DataFrame(data._internal.with_new_sdf(sampled))._to_pandas()
+            return pdf
         else:
             raise TypeError("Only DataFrame and Series are supported for plotting.")
 
