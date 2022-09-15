@@ -3942,8 +3942,8 @@ class SeriesGroupBy(GroupBy[Series]):
                     "automatically fallback to Pandas."
                 )
                 group = pd.core.groupby.generic.SeriesGroupBy(  # type: ignore[call-arg]
-                    obj=self._psdf._to_pandas(),
-                    keys=[self._psser.name],
+                    obj=self._psser._to_pandas(),
+                    keys=[psser._to_pandas() for psser in self._groupkeys],
                     axis=0,
                     dropna=self._dropna,
                 )

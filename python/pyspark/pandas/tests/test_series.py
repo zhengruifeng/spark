@@ -3387,6 +3387,17 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, "Could not convert object"):
             ps.Series(["a", "b", "c"]).sem()
 
+    def test_fallback(self):
+        index = pd.date_range("1/1/2000", periods=4, freq="T")
+        pser = pd.Series([0.0, None, 2.0, 3.0], index=index)
+        psser = ps.from_pandas(pser)
+
+        with self.assertRaisesRegex(PandasNotImplementedError, "not implemented yet"):
+            psser.asfreq(freq="30S")
+
+        with ps.option_context("compute.pandas_fallback", True):
+            self.assert_eq(pser.asfreq(freq="30S"), psser.asfreq(freq="30S"))
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_series import *  # noqa: F401

@@ -3171,6 +3171,37 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
         self.assertTrue(isinstance(psdf.groupby("a")["b"], SeriesGroupBy))
 
+    def test_fallback(self):
+        pdf = pd.DataFrame(
+            {
+                "a": [1, 2, 6, 4, 4, 6, 4, 3, 7],
+                "b": [4, 2, 7, 3, 3, 1, 1, 1, 2],
+                "c": [4, 2, 7, 3, None, 1, 1, 1, 2],
+                "d": list("abcdefght"),
+                "e": [True, False, True, False, True, False, True, False, True],
+            },
+            index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
+        )
+        psdf = ps.from_pandas(pdf)
+
+        with self.assertRaisesRegex(PandasNotImplementedError, "not implemented yet"):
+            psdf.groupby("e").prod()
+        with self.assertRaisesRegex(PandasNotImplementedError, "not implemented yet"):
+            psdf.a.groupby(psdf.e).prod()
+        with self.assertRaisesRegex(PandasNotImplementedError, "not implemented yet"):
+            psdf.groupby("e").ngroup()
+        with self.assertRaisesRegex(PandasNotImplementedError, "not implemented yet"):
+            psdf.a.groupby(psdf.e).ngroup()
+
+        with ps.option_context("compute.pandas_fallback", True):
+            self.assert_eq(pdf.groupby("e").prod(), psdf.groupby("e").prod())
+        with ps.option_context("compute.pandas_fallback", True):
+            self.assert_eq(pdf.a.groupby(pdf.e).prod(), psdf.a.groupby(psdf.e).prod())
+        with ps.option_context("compute.pandas_fallback", True):
+            self.assert_eq(pdf.groupby("e").ngroup(), psdf.groupby("e").ngroup())
+        with ps.option_context("compute.pandas_fallback", True):
+            self.assert_eq(pdf.a.groupby(pdf.e).ngroup(), psdf.a.groupby(psdf.e).ngroup())
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_groupby import *  # noqa: F401

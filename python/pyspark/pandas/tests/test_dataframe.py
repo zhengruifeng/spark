@@ -7073,6 +7073,18 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         with ps.option_context("compute.max_rows", None):
             check_style()
 
+    def test_fallback(self):
+        pdf1 = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+        pdf2 = pd.DataFrame({"A": [1, 1, 3], "B": [4, 5, 6]})
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
+
+        with self.assertRaisesRegex(PandasNotImplementedError, "not implemented yet"):
+            psdf1.compare(psdf2)
+
+        with ps.option_context("compute.pandas_fallback", True):
+            self.assert_eq(pdf1.compare(pdf2), psdf1.compare(psdf2))
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_dataframe import *  # noqa: F401
