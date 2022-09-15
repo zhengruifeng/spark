@@ -3740,7 +3740,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
                     f"DataFrameGroupBy.{item} was not implemented in Pandas-API-on-Spark yet, "
                     "automatically fallback to Pandas."
                 )
-                group = pd.core.groupby.generic.DataFrameGroupBy(
+                group = pd.core.groupby.generic.DataFrameGroupBy(  # type: ignore[call-arg]
                     obj=self._psdf._to_pandas(),
                     keys=[psser.name for psser in self._groupkeys],
                     axis=0,
@@ -3941,7 +3941,7 @@ class SeriesGroupBy(GroupBy[Series]):
                     f"SeriesGroupBy.{item} was not implemented in Pandas-API-on-Spark yet, "
                     "automatically fallback to Pandas."
                 )
-                group = pd.core.groupby.generic.SeriesGroupBy(
+                group = pd.core.groupby.generic.SeriesGroupBy(  # type: ignore[call-arg]
                     obj=self._psdf._to_pandas(),
                     keys=[self._psser.name],
                     axis=0,

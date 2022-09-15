@@ -994,7 +994,7 @@ def validate_index_loc(index: "Index", loc: int) -> None:
 
 
 def pandas_fallback(f: Callable) -> Callable:
-    if isinstance(f, Callable):
+    if isinstance(f, Callable):  # type: ignore[arg-type]
 
         @functools.wraps(f)
         def wrapped(*args: Any, **kwargs: Any) -> Any:
