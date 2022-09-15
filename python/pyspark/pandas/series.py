@@ -103,6 +103,7 @@ from pyspark.pandas.utils import (
     is_name_like_tuple,
     is_name_like_value,
     name_like_string,
+    pandas_fallback,
     same_anchor,
     scol_for,
     sql_conf,
@@ -7260,10 +7261,20 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise AttributeError(item)
         if hasattr(MissingPandasLikeSeries, item):
             property_or_func = getattr(MissingPandasLikeSeries, item)
-            if isinstance(property_or_func, property):
-                return property_or_func.fget(self)
+            if get_option("compute.pandas_fallback"):
+                log_advice(
+                    f"Series.{item} was not implemented in Pandas-API-on-Spark yet, "
+                    "automatically fallback to Pandas."
+                )
+                if isinstance(property_or_func, property):
+                    return getattr(self._to_pandas(), item)
+                else:
+                    return pandas_fallback(getattr(self._to_pandas(), item))
             else:
-                return partial(property_or_func, self)
+                if isinstance(property_or_func, property):
+                    return property_or_func.fget(self)
+                else:
+                    return partial(property_or_func, self)
         raise AttributeError("'Series' object has no attribute '{}'".format(item))
 
     def _to_internal_pandas(self) -> pd.Series:

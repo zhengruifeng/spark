@@ -993,6 +993,36 @@ def validate_index_loc(index: "Index", loc: int) -> None:
             )
 
 
+def pandas_fallback(f: Callable) -> Callable:
+    if isinstance(f, Callable):
+
+        @functools.wraps(f)
+        def wrapped(*args: Any, **kwargs: Any) -> Any:
+            new_args = []
+            for arg in args:
+                if isinstance(arg, (ps.Series, ps.DataFrame)):
+                    new_args.append(arg._to_pandas())
+                else:
+                    new_args.append(arg)
+
+            new_kwargs = {}
+            for k, w in kwargs.items():
+                if isinstance(w, (ps.Series, ps.DataFrame)):
+                    new_kwargs[k] = w._to_pandas()
+                else:
+                    new_kwargs[k] = w
+
+            result = f(*new_args, **new_kwargs)
+            if isinstance(result, (pd.Series, pd.DataFrame)):
+                return ps.from_pandas(result)
+            else:
+                return result
+
+        return wrapped
+    else:
+        return f
+
+
 def _test() -> None:
     import os
     import doctest

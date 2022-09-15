@@ -106,6 +106,7 @@ from pyspark.pandas.utils import (
     is_name_like_value,
     is_testing,
     name_like_string,
+    pandas_fallback,
     same_anchor,
     scol_for,
     validate_arguments_and_invoke_function,
@@ -13497,10 +13498,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise AttributeError(key)
         if hasattr(MissingPandasLikeDataFrame, key):
             property_or_func = getattr(MissingPandasLikeDataFrame, key)
-            if isinstance(property_or_func, property):
-                return property_or_func.fget(self)
+            if get_option("compute.pandas_fallback"):
+                log_advice(
+                    f"DataFrame.{key} was not implemented in Pandas-API-on-Spark yet, "
+                    "automatically fallback to Pandas."
+                )
+                if isinstance(property_or_func, property):
+                    return getattr(self._to_pandas(), key)
+                else:
+                    return pandas_fallback(getattr(self._to_pandas(), key))
             else:
-                return partial(property_or_func, self)
+                if isinstance(property_or_func, property):
+                    return property_or_func.fget(self)
+                else:
+                    return partial(property_or_func, self)
 
         try:
             return self.loc[:, key]

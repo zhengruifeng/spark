@@ -90,6 +90,7 @@ from pyspark.pandas.utils import (
     is_name_like_tuple,
     is_name_like_value,
     name_like_string,
+    pandas_fallback,
     same_anchor,
     scol_for,
     verify_temp_column_name,
@@ -3734,10 +3735,26 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeDataFrameGroupBy, item):
             property_or_func = getattr(MissingPandasLikeDataFrameGroupBy, item)
-            if isinstance(property_or_func, property):
-                return property_or_func.fget(self)
+            if get_option("compute.pandas_fallback"):
+                log_advice(
+                    f"DataFrameGroupBy.{item} was not implemented in Pandas-API-on-Spark yet, "
+                    "automatically fallback to Pandas."
+                )
+                group = pd.core.groupby.generic.DataFrameGroupBy(
+                    obj=self._psdf._to_pandas(),
+                    keys=[psser.name for psser in self._groupkeys],
+                    axis=0,
+                    dropna=self._dropna,
+                )
+                if isinstance(property_or_func, property):
+                    return getattr(group, item)
+                else:
+                    return pandas_fallback(getattr(group, item))
             else:
-                return partial(property_or_func, self)
+                if isinstance(property_or_func, property):
+                    return property_or_func.fget(self)
+                else:
+                    return partial(property_or_func, self)
         return self.__getitem__(item)
 
     def __getitem__(self, item: Any) -> GroupBy:
@@ -3919,10 +3936,26 @@ class SeriesGroupBy(GroupBy[Series]):
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeSeriesGroupBy, item):
             property_or_func = getattr(MissingPandasLikeSeriesGroupBy, item)
-            if isinstance(property_or_func, property):
-                return property_or_func.fget(self)
+            if get_option("compute.pandas_fallback"):
+                log_advice(
+                    f"SeriesGroupBy.{item} was not implemented in Pandas-API-on-Spark yet, "
+                    "automatically fallback to Pandas."
+                )
+                group = pd.core.groupby.generic.SeriesGroupBy(
+                    obj=self._psdf._to_pandas(),
+                    keys=[self._psser.name],
+                    axis=0,
+                    dropna=self._dropna,
+                )
+                if isinstance(property_or_func, property):
+                    return getattr(group, item)
+                else:
+                    return pandas_fallback(getattr(group, item))
             else:
-                return partial(property_or_func, self)
+                if isinstance(property_or_func, property):
+                    return property_or_func.fget(self)
+                else:
+                    return partial(property_or_func, self)
         raise AttributeError(item)
 
     def _apply_series_op(
