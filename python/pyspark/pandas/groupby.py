@@ -3941,9 +3941,10 @@ class SeriesGroupBy(GroupBy[Series]):
                     f"SeriesGroupBy.{item} was not implemented in Pandas-API-on-Spark yet, "
                     "automatically fallback to Pandas."
                 )
+                keys = [psser._to_pandas() for psser in self._groupkeys]
                 group = pd.core.groupby.generic.SeriesGroupBy(  # type: ignore[call-arg]
                     obj=self._psser._to_pandas(),
-                    keys=[psser._to_pandas() for psser in self._groupkeys],
+                    keys=keys,  # type: ignore[arg-type]
                     axis=0,
                     dropna=self._dropna,
                 )
