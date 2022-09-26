@@ -23,9 +23,11 @@ from distutils.version import LooseVersion
 from functools import partial
 from typing import (
     Any,
+    Callable,
     Generic,
     List,
     Optional,
+    Union,
 )
 
 import numpy as np
@@ -51,6 +53,7 @@ from pyspark.sql.types import (
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import FrameLike
 from pyspark.pandas.frame import DataFrame
+from pyspark.pandas.groupby import DataFrameGroupBy
 from pyspark.pandas.internal import (
     InternalField,
     InternalFrame,
@@ -290,7 +293,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         else:
             raise ValueError("Got the unexpected unit {}".format(rule_code))
 
-    def _downsample(self, f: str) -> DataFrame:
+    def _downsample(self, f: Union[str, Callable[[DataFrameGroupBy], DataFrame]]) -> DataFrame:
         """
         Downsample the defined function.
 
@@ -401,8 +404,11 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         )
         psdf: DataFrame = DataFrame(internal)
 
-        groupby = psdf.groupby(psdf._psser_for(bin_col_label), dropna=False)
-        downsampled = getattr(groupby, f)()
+        groupby: DataFrameGroupBy = psdf.groupby(psdf._psser_for(bin_col_label), dropna=False)
+        if isinstance(f, str):
+            downsampled = getattr(groupby, f)()
+        else:
+            downsampled = f(groupby)
         downsampled.index.name = None
 
         return downsampled
@@ -411,7 +417,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
     def _handle_output(self, psdf: DataFrame) -> FrameLike:
         pass
 
-    def min(self) -> FrameLike:
+    def min(self, numeric_only: Optional[bool] = False) -> FrameLike:
         """
         Compute min of resampled values.
 
@@ -455,7 +461,11 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         2022-05-07       NaN       NaN
         2022-05-10  0.813726  0.745100
         """
-        return self._handle_output(self._downsample("min"))
+
+        def min(group: DataFrameGroupBy) -> DataFrame:
+            return group.min(numeric_only=numeric_only)
+
+        return self._handle_output(self._downsample(min))
 
     def max(self) -> FrameLike:
         """
