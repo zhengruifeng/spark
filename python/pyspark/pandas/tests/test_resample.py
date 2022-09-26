@@ -268,6 +268,10 @@ class ResampleTest(PandasOnSparkTestCase, TestUtils):
         self._test_resample(self.pdf5.A, self.psdf5.A, ["47T"], ["sum"])
         self._test_resample(self.pdf6.A, self.psdf6.A, ["111S"], ["sum"])
 
+    def test_median(self):
+        self._test_resample(self.pdf1.A, self.psdf1.A, ["5Y"], ["median"])
+        self._test_resample(self.pdf6.A, self.psdf6.A, ["111S"], ["median"])
+
     def test_resample_on(self):
         np.random.seed(77)
         dates = [

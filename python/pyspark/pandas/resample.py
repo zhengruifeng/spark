@@ -687,6 +687,52 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         """
         return self._handle_output(self._downsample("var"))
 
+    def median(self) -> FrameLike:
+        """
+        Compute var of resampled values.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from datetime import datetime
+        >>> np.random.seed(22)
+        >>> dates = [
+        ...    datetime(2022, 5, 1, 4, 5, 6),
+        ...    datetime(2022, 5, 3),
+        ...    datetime(2022, 5, 3, 23, 59, 59),
+        ...    datetime(2022, 5, 4),
+        ...    pd.NaT,
+        ...    datetime(2022, 5, 4, 0, 0, 1),
+        ...    datetime(2022, 5, 11),
+        ... ]
+        >>> df = ps.DataFrame(
+        ...    np.random.rand(len(dates), 2), index=pd.DatetimeIndex(dates), columns=["A", "B"]
+        ... )
+        >>> df
+                                    A         B
+        2022-05-01 04:05:06  0.208461  0.481681
+        2022-05-03 00:00:00  0.420538  0.859182
+        2022-05-03 23:59:59  0.171162  0.338864
+        2022-05-04 00:00:00  0.270533  0.691041
+        NaT                  0.220405  0.811951
+        2022-05-04 00:00:01  0.010527  0.561204
+        2022-05-11 00:00:00  0.813726  0.745100
+        >>> df.resample("3D").median().sort_index()
+                           A         B
+        2022-05-01  0.208461  0.481681
+        2022-05-04  0.010527  0.561204
+        2022-05-07       NaN       NaN
+        2022-05-10  0.813726  0.745100
+        """
+        return self._handle_output(self._downsample("median"))
+
 
 class DataFrameResampler(Resampler[DataFrame]):
     def __init__(
