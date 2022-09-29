@@ -3185,18 +3185,10 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         psdf = ps.from_pandas(pdf)
 
         with self.assertRaisesRegex(PandasNotImplementedError, "not implemented yet"):
-            psdf.groupby("e").prod()
-        with self.assertRaisesRegex(PandasNotImplementedError, "not implemented yet"):
-            psdf.a.groupby(psdf.e).prod()
-        with self.assertRaisesRegex(PandasNotImplementedError, "not implemented yet"):
             psdf.groupby("e").ngroup()
         with self.assertRaisesRegex(PandasNotImplementedError, "not implemented yet"):
             psdf.a.groupby(psdf.e).ngroup()
 
-        with ps.option_context("compute.pandas_fallback", True):
-            self.assert_eq(pdf.groupby("e").prod(), psdf.groupby("e").prod())
-        with ps.option_context("compute.pandas_fallback", True):
-            self.assert_eq(pdf.a.groupby(pdf.e).prod(), psdf.a.groupby(psdf.e).prod())
         with ps.option_context("compute.pandas_fallback", True):
             self.assert_eq(pdf.groupby("e").ngroup(), psdf.groupby("e").ngroup())
         with ps.option_context("compute.pandas_fallback", True):
