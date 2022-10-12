@@ -9115,7 +9115,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         sdf = sdf.select(F.inline(F.array(*pair_scols)))
 
         sdf = compute(
-            sdf=sdf, groupKeys=[index_1_col_name, index_2_col_name], method="cov", ddof=ddof
+            sdf=sdf,
+            groupKeys=[index_1_col_name, index_2_col_name],
+            method="covariance",
+            ddof=ddof,
         )
 
         sdf = sdf.withColumn(

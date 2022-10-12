@@ -44,7 +44,7 @@ def compute(
     `CORRELATION_COUNT_OUTPUT_COLUMN`, as well as the group columns.
     """
     assert len(groupKeys) > 0
-    assert method in ["pearson", "spearman", "kendall", "cov"]
+    assert method in ["pearson", "spearman", "kendall", "covariance"]
 
     sdf = sdf.select(
         *[F.col(key) for key in groupKeys],
@@ -143,7 +143,7 @@ def compute(
 
         return sdf
 
-    elif method == "cov":
+    elif method == "covariance":
 
         ddof = kwargs.get("ddof", 1)
 
