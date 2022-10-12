@@ -1047,18 +1047,36 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         min_periods = 1 if min_periods is None else min_periods
 
         if same_anchor(self, other):
-            sdf = self._internal.spark_frame.select(self.spark.column, other.spark.column)
+            combined = self
+            this = self
+            that = other
         else:
-            combined = combine_frames(self.to_frame(), other.to_frame())
-            sdf = combined._internal.spark_frame.select(*combined._internal.data_spark_columns)
+            combined = combine_frames(self._psdf, other._psdf)  # type: ignore[assignment]
+            this = combined["this"]
+            that = combined["that"]
 
-        sdf = sdf.dropna()
+        sdf = combined._internal.spark_frame
+        index_col_name = verify_temp_column_name(sdf, "__ser_cov_index_temp_column__")
+        this_scol = this._internal.spark_column_for(this._internal.column_labels[0])
+        that_scol = that._internal.spark_column_for(that._internal.column_labels[0])
 
-        if len(sdf.head(min_periods)) < min_periods:
-            return np.nan
+        sdf = sdf.select(
+            F.lit(0).alias(index_col_name),
+            this_scol.cast("double").alias(CORRELATION_VALUE_1_COLUMN),
+            that_scol.cast("double").alias(CORRELATION_VALUE_2_COLUMN),
+        )
+
+        sdf = compute(sdf=sdf, groupKeys=[index_col_name], method="covariance").select(
+            F.when(
+                F.col(CORRELATION_COUNT_OUTPUT_COLUMN) < min_periods, F.lit(None).cast("double")
+            ).otherwise(F.col(CORRELATION_CORR_OUTPUT_COLUMN))
+        )
+
+        results = sdf.take(1)
+        if len(results) == 0:
+            raise ValueError("attempt to get cov of an empty sequence")
         else:
-            sdf = sdf.select(SF.covar(F.col(sdf.columns[0]), F.col(sdf.columns[1]), ddof))
-            return sdf.head(1)[0][0]
+            return np.nan if results[0][0] is None else results[0][0]
 
     # TODO: NaN and None when ``arg`` is an empty dict
     # TODO: Support ps.Series ``arg``
