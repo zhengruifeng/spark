@@ -15,11 +15,12 @@
 # limitations under the License.
 #
 
-from typing import List
+from typing import Any, List
 
 from pyspark.sql import DataFrame as SparkDataFrame, functions as F
 from pyspark.sql.window import Window
 
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.utils import verify_temp_column_name
 
 
@@ -29,7 +30,9 @@ CORRELATION_CORR_OUTPUT_COLUMN = "__correlation_corr_output__"
 CORRELATION_COUNT_OUTPUT_COLUMN = "__correlation_count_output__"
 
 
-def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkDataFrame:
+def compute(
+    sdf: SparkDataFrame, groupKeys: List[str], method: str, **kwargs: Any
+) -> SparkDataFrame:
     """
     Compute correlation per group, excluding NA/null values.
 
@@ -41,7 +44,7 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
     `CORRELATION_COUNT_OUTPUT_COLUMN`, as well as the group columns.
     """
     assert len(groupKeys) > 0
-    assert method in ["pearson", "spearman", "kendall"]
+    assert method in ["pearson", "spearman", "kendall", "cov"]
 
     sdf = sdf.select(
         *[F.col(key) for key in groupKeys],
@@ -130,6 +133,24 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
             F.corr(CORRELATION_VALUE_1_COLUMN, CORRELATION_VALUE_2_COLUMN).alias(
                 CORRELATION_CORR_OUTPUT_COLUMN
             ),
+            F.count(
+                F.when(
+                    ~F.isnull(CORRELATION_VALUE_1_COLUMN),
+                    1,
+                )
+            ).alias(CORRELATION_COUNT_OUTPUT_COLUMN),
+        )
+
+        return sdf
+
+    elif method == "cov":
+
+        ddof = kwargs.get("ddof", 1)
+
+        sdf = sdf.groupby(groupKeys).agg(
+            SF.covar(
+                F.col(CORRELATION_VALUE_1_COLUMN), F.col(CORRELATION_VALUE_2_COLUMN), ddof
+            ).alias(CORRELATION_CORR_OUTPUT_COLUMN),
             F.count(
                 F.when(
                     ~F.isnull(CORRELATION_VALUE_1_COLUMN),

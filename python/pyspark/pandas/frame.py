@@ -78,7 +78,6 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
-    DecimalType,
     TimestampType,
     TimestampNTZType,
 )
@@ -9085,116 +9084,111 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise TypeError("ddof must be integer")
         min_periods = 1 if min_periods is None else min_periods
 
-        # Only compute covariance for Boolean and Numeric except Decimal
-        psdf = self[
-            [
-                col
-                for col in self.columns
-                if isinstance(self[col].spark.data_type, BooleanType)
-                or (
-                    isinstance(self[col].spark.data_type, NumericType)
-                    and not isinstance(self[col].spark.data_type, DecimalType)
-                )
-            ]
+        internal = self._internal.resolved_copy
+        numeric_labels = [
+            label
+            for label in internal.column_labels
+            if isinstance(internal.spark_type_for(label), (NumericType, BooleanType))
         ]
+        numeric_scols: List[Column] = [
+            internal.spark_column_for(label).cast("double") for label in numeric_labels
+        ]
+        numeric_col_names: List[str] = [name_like_string(label) for label in numeric_labels]
+        num_scols = len(numeric_scols)
 
-        num_cols = len(psdf.columns)
-        cov = np.zeros([num_cols, num_cols])
+        sdf = internal.spark_frame
+        index_1_col_name = verify_temp_column_name(sdf, "__cov_index_1_temp_column__")
+        index_2_col_name = verify_temp_column_name(sdf, "__cov_index_2_temp_column__")
 
-        if num_cols == 0:
-            return DataFrame()
-
-        if len(psdf) < min_periods:
-            cov.fill(np.nan)
-            return DataFrame(cov, columns=psdf.columns, index=psdf.columns)
-
-        data_cols = psdf._internal.data_spark_column_names
-        cov_scols = []
-        count_not_null_scols = []
-
-        # Count number of null row between two columns
-        # Example:
-        #    a   b   c
-        # 0  1   1   1
-        # 1  NaN 2   2
-        # 2  3   NaN 3
-        # 3  4   4   4
-        #
-        #    a           b             c
-        # a  count(a, a) count(a, b) count(a, c)
-        # b              count(b, b) count(b, c)
-        # c                          count(c, c)
-        #
-        # count_not_null_scols =
-        # [F.count(a, a), F.count(a, b), F.count(a, c), F.count(b, b), F.count(b, c), F.count(c, c)]
-        for r in range(0, num_cols):
-            for c in range(r, num_cols):
-                count_not_null_scols.append(
-                    F.count(
-                        F.when(F.col(data_cols[r]).isNotNull() & F.col(data_cols[c]).isNotNull(), 1)
+        pair_scols: List[Column] = []
+        for i in range(0, num_scols):
+            for j in range(i, num_scols):
+                pair_scols.append(
+                    F.struct(
+                        F.lit(i).alias(index_1_col_name),
+                        F.lit(j).alias(index_2_col_name),
+                        numeric_scols[i].alias(CORRELATION_VALUE_1_COLUMN),
+                        numeric_scols[j].alias(CORRELATION_VALUE_2_COLUMN),
                     )
                 )
 
-        count_not_null = (
-            psdf._internal.spark_frame.replace(float("nan"), None)
-            .select(*count_not_null_scols)
-            .head(1)[0]
+        sdf = sdf.select(F.inline(F.array(*pair_scols)))
+
+        sdf = compute(
+            sdf=sdf, groupKeys=[index_1_col_name, index_2_col_name], method="cov", ddof=ddof
         )
 
-        # Calculate covariance between two columns
-        # Example:
-        # with min_periods = 3
-        #    a   b   c
-        # 0  1   1   1
-        # 1  NaN 2   2
-        # 2  3   NaN 3
-        # 3  4   4   4
-        #
-        #    a         b         c
-        # a  cov(a, a) None      cov(a, c)
-        # b            cov(b, b) cov(b, c)
-        # c                      cov(c, c)
-        #
-        # cov_scols = [F.cov(a, a), None, F.cov(a, c), F.cov(b, b), F.cov(b, c), F.cov(c, c)]
-        step = 0
-        for r in range(0, num_cols):
-            step += r
-            for c in range(r, num_cols):
-                cov_scols.append(
-                    SF.covar(
-                        F.col(data_cols[r]).cast("double"), F.col(data_cols[c]).cast("double"), ddof
+        sdf = sdf.withColumn(
+            CORRELATION_CORR_OUTPUT_COLUMN,
+            F.when(F.col(CORRELATION_COUNT_OUTPUT_COLUMN) < min_periods, F.lit(None)).otherwise(
+                F.col(CORRELATION_CORR_OUTPUT_COLUMN)
+            ),
+        )
+
+        auxiliary_col_name = verify_temp_column_name(sdf, "__cov_auxiliary_temp_column__")
+        sdf = sdf.withColumn(
+            auxiliary_col_name,
+            F.explode(
+                F.when(
+                    F.col(index_1_col_name) == F.col(index_2_col_name),
+                    F.lit([0]),
+                ).otherwise(F.lit([0, 1]))
+            ),
+        ).select(
+            F.when(F.col(auxiliary_col_name) == 0, F.col(index_1_col_name))
+            .otherwise(F.col(index_2_col_name))
+            .alias(index_1_col_name),
+            F.when(F.col(auxiliary_col_name) == 0, F.col(index_2_col_name))
+            .otherwise(F.col(index_1_col_name))
+            .alias(index_2_col_name),
+            F.col(CORRELATION_CORR_OUTPUT_COLUMN),
+        )
+
+        array_col_name = verify_temp_column_name(sdf, "__cov_array_temp_column__")
+        sdf = (
+            sdf.groupby(index_1_col_name)
+            .agg(
+                F.array_sort(
+                    F.collect_list(
+                        F.struct(F.col(index_2_col_name), F.col(CORRELATION_CORR_OUTPUT_COLUMN))
                     )
-                    if count_not_null[r * num_cols + c - step] >= min_periods
-                    else F.lit(None)
-                )
+                ).alias(array_col_name)
+            )
+            .orderBy(index_1_col_name)
+        )
 
-        pair_cov = psdf._internal.spark_frame.select(*cov_scols).head(1)[0]
+        for i in range(0, num_scols):
+            sdf = sdf.withColumn(auxiliary_col_name, F.get(F.col(array_col_name), i)).withColumn(
+                numeric_col_names[i],
+                F.col(f"{auxiliary_col_name}.{CORRELATION_CORR_OUTPUT_COLUMN}"),
+            )
 
-        # Convert from row to 2D array
-        # Example:
-        # pair_cov = [cov(a, a), None, cov(a, c), cov(b, b), cov(b, c), cov(c, c)]
-        #
-        # cov =
-        #
-        #    a         b         c
-        # a  cov(a, a) None      cov(a, c)
-        # b            cov(b, b) cov(b, c)
-        # c                      cov(c, c)
-        step = 0
-        for r in range(0, num_cols):
-            step += r
-            for c in range(r, num_cols):
-                cov[r][c] = pair_cov[r * num_cols + c - step]
+        index_col_names: List[str] = []
+        if internal.column_labels_level > 1:
+            for level in range(0, internal.column_labels_level):
+                index_col_name = SPARK_INDEX_NAME_FORMAT(level)
+                indices = [label[level] for label in numeric_labels]
+                sdf = sdf.withColumn(index_col_name, F.get(F.lit(indices), F.col(index_1_col_name)))
+                index_col_names.append(index_col_name)
+        else:
+            sdf = sdf.withColumn(
+                SPARK_DEFAULT_INDEX_NAME,
+                F.get(F.lit(numeric_col_names), F.col(index_1_col_name)),
+            )
+            index_col_names = [SPARK_DEFAULT_INDEX_NAME]
 
-        # Copy values
-        # Example:
-        # cov =
-        #    a         b         c
-        # a  cov(a, a) None      cov(a, c)
-        # b  None      cov(b, b) cov(b, c)
-        # c  cov(a, c) cov(b, c) cov(c, c)
-        cov = cov + cov.T - np.diag(np.diag(cov))
-        return DataFrame(cov, columns=psdf.columns, index=psdf.columns)
+        sdf = sdf.select(*index_col_names, *numeric_col_names)
+
+        return DataFrame(
+            InternalFrame(
+                spark_frame=sdf,
+                index_spark_columns=[
+                    scol_for(sdf, index_col_name) for index_col_name in index_col_names
+                ],
+                column_labels=numeric_labels,
+                column_label_names=internal.column_label_names,
+            )
+        )
 
     def sample(
         self,
