@@ -23,8 +23,9 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Cast, Coalesce, CreateMap, CreateStruct, ElementAt, Expression, Literal}
 import org.apache.spark.sql.execution.stat._
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, rand}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
@@ -419,12 +420,39 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): DataFrame = {
     require(fractions.values.forall(p => p >= 0.0 && p <= 1.0),
       s"Fractions must be in [0, 1], but got $fractions.")
-    import org.apache.spark.sql.functions.{rand, udf}
-    val r = rand(seed)
-    val f = udf { (stratum: Any, x: Double) =>
-      x < fractions.getOrElse(stratum.asInstanceOf[T], 0.0)
+
+    def convert(obj: Any, dataType: DataType): Expression = {
+      if (obj == null) return Literal(null, dataType)
+
+      dataType match {
+        case struct: StructType =>
+          obj match {
+            case row: Row =>
+              val converted = row.toSeq.zip(struct.fields)
+                .map(t => convert(t._1, t._2.dataType))
+              Cast(CreateStruct(converted), struct)
+            case product: Product =>
+              val converted = product.productIterator.toSeq.zip(struct.fields)
+                .map(t => convert(t._1, t._2.dataType))
+              Cast(CreateStruct(converted), struct)
+            case _ =>
+              Cast(Literal(obj), dataType)
+          }
+
+        case _ => Cast(Literal(obj), dataType)
+      }
     }
-    df.filter(f(col, r))
+
+    val dataType = df.select(col).schema.fields.head.dataType
+    val converted = fractions.toSeq.flatMap { case (k, v) =>
+      convert(k, dataType) :: Literal(v) :: Nil
+    }
+    // 'Literal' doesn't support MapType for now, use 'CreateMap' instead
+    val fractionMap = CreateMap(converted)
+
+    val fractionCol = new Column(
+      Coalesce(ElementAt(fractionMap, col.expr) :: Literal(0.0) :: Nil))
+    df.filter(rand(seed) < fractionCol)
   }
 
   /**

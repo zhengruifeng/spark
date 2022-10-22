@@ -440,6 +440,13 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sampled.groupBy("key").count().orderBy("key"),
       Seq(Row(0, 1), Row(1, 6)))
+
+    // use Tuple instead of Row
+    val sampled2 = df.stat.sampleBy(
+      struct($"name", $"key"), Map(("Foo", 0) -> 0.1, ("Foo", 1) -> 0.2), 0L)
+    checkAnswer(
+      sampled2.groupBy("key").count().orderBy("key"),
+      Seq(Row(0, 1), Row(1, 6)))
   }
 
   // This test case only verifies that `DataFrame.countMinSketch()` methods do return
