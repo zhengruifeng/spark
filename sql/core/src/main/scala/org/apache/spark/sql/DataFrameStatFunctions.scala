@@ -427,12 +427,9 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       dataType match {
         case struct: StructType =>
           obj match {
+            // Row is used for multiple columns
             case row: Row =>
               val converted = row.toSeq.zip(struct.fields)
-                .map(t => convert(t._1, t._2.dataType))
-              Cast(CreateStruct(converted), struct)
-            case product: Product =>
-              val converted = product.productIterator.toSeq.zip(struct.fields)
                 .map(t => convert(t._1, t._2.dataType))
               Cast(CreateStruct(converted), struct)
             case _ =>
