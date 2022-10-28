@@ -143,7 +143,7 @@ Aggregate [count(distinct a#x) AS count(DISTINCT a)#xL, count(distinct 2) AS cou
 -- !query
 SELECT count(distinct 0.8), percentile_approx(distinct a, 0.8) FROM testData
 -- !query analysis
-Aggregate [count(distinct 0.8) AS count(DISTINCT 0.8)#xL, percentile_approx(distinct a#x, cast(0.8 as double), 10000, 0, 0) AS percentile_approx(DISTINCT a, 0.8, 10000)#x]
+Aggregate [count(distinct 0.8) AS count(DISTINCT 0.8)#xL, percentile_approx(distinct a#x, cast(0.8 as double), 10000, 0, 0, false) AS percentile_approx(DISTINCT a, 0.8, 10000)#x]
 +- SubqueryAlias testdata
    +- View (`testData`, [a#x,b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]

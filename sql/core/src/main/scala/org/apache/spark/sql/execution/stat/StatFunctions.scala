@@ -20,10 +20,9 @@ package org.apache.spark.sql.execution.stat
 import java.util.Locale
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.expressions.{Cast, ElementAt, EvalMode}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -67,44 +66,25 @@ object StatFunctions extends Logging {
       relativeError: Double): Seq[Seq[Double]] = {
     require(relativeError >= 0,
       s"Relative Error must be non-negative but got $relativeError")
-    val columns: Seq[Column] = cols.map { colName =>
-      val field = df.resolve(colName)
-      require(field.dataType.isInstanceOf[NumericType],
-        s"Quantile calculation for column $colName with data type ${field.dataType}" +
-        " is not supported.")
-      Column(Cast(Column(colName).expr, DoubleType))
-    }
-    val emptySummaries = Array.fill(cols.size)(
-      new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))
+    val accuracyExpr = lit(1.0D / relativeError).expr
+    val probsExpr = lit(probabilities.toArray).expr
 
-    // Note that it works more or less by accident as `rdd.aggregate` is not a pure function:
-    // this function returns the same array as given in the input (because `aggregate` reuses
-    // the same argument).
-    def apply(summaries: Array[QuantileSummaries], row: Row): Array[QuantileSummaries] = {
-      var i = 0
-      while (i < summaries.length) {
-        if (!row.isNullAt(i)) {
-          val v = row.getDouble(i)
-          if (!v.isNaN) summaries(i) = summaries(i).insert(v)
-        }
-        i += 1
-      }
-      summaries
+    val columns = cols.map { c =>
+      val dataType = df.resolve(c).dataType
+      require(dataType.isInstanceOf[NumericType],
+        s"Quantile calculation for column $c with data type $dataType is not supported.")
+      val casted = col(c).cast(DoubleType)
+      val quantilesCol = Column(
+        ApproximatePercentile(
+          when(isnan(casted), lit(null)).otherwise(casted).expr,
+          probsExpr, accuracyExpr, 0, 0, true
+        ).toAggregateExpression()
+      )
+      when(isnull(quantilesCol), lit(Array.emptyDoubleArray))
+        .otherwise(quantilesCol)
     }
-
-    def merge(
-        sum1: Array[QuantileSummaries],
-        sum2: Array[QuantileSummaries]): Array[QuantileSummaries] = {
-      sum1.zip(sum2).map { case (s1, s2) => s1.compress().merge(s2.compress()) }
-    }
-    val summaries = df.select(columns: _*).rdd.treeAggregate(emptySummaries)(apply, merge)
-
-    summaries.map {
-      summary => summary.query(probabilities) match {
-        case Some(q) => q
-        case None => Seq()
-      }
-    }
+    val row = df.select(columns: _*).head
+    Seq.tabulate(cols.size)(i => row.getSeq[Double](i))
   }
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */

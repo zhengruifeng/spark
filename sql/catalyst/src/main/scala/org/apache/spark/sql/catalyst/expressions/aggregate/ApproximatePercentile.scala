@@ -84,12 +84,13 @@ case class ApproximatePercentile(
     percentageExpression: Expression,
     accuracyExpression: Expression,
     override val mutableAggBufferOffset: Int,
-    override val inputAggBufferOffset: Int)
+    override val inputAggBufferOffset: Int,
+    allowFloatAccuracy: Boolean)
   extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes
   with TernaryLike[Expression] {
 
   def this(child: Expression, percentageExpression: Expression, accuracyExpression: Expression) = {
-    this(child, percentageExpression, accuracyExpression, 0, 0)
+    this(child, percentageExpression, accuracyExpression, 0, 0, false)
   }
 
   def this(child: Expression, percentageExpression: Expression) = {
@@ -97,14 +98,15 @@ case class ApproximatePercentile(
   }
 
   // Mark as lazy so that accuracyExpression is not evaluated during tree transformation.
-  private lazy val accuracy: Long = accuracyExpression.eval().asInstanceOf[Number].longValue
+  private lazy val accuracy: Number = accuracyExpression.eval().asInstanceOf[Number]
 
   override def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
     // are all numeric, and can be easily cast to double for processing.
     Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
       YearMonthIntervalType, DayTimeIntervalType),
-      TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)), IntegralType)
+      TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)),
+      if (allowFloatAccuracy) DoubleType else IntegralType)
   }
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
@@ -138,13 +140,24 @@ case class ApproximatePercentile(
           "inputExpr" -> toSQLExpr(accuracyExpression)
         )
       )
-    } else if (accuracy <= 0 || accuracy > Int.MaxValue) {
+    } else if (allowFloatAccuracy &&
+      (accuracy.doubleValue() <= 0 || accuracy.doubleValue().isNaN)) {
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "accuracy",
+          "valueRange" -> s"(0, +Infinity)",
+          "currentValue" -> toSQLValue(accuracy.doubleValue(), LongType)
+        )
+      )
+    } else if (!allowFloatAccuracy &&
+      (accuracy.longValue() <= 0 || accuracy.longValue() > Int.MaxValue)) {
       DataTypeMismatch(
         errorSubClass = "VALUE_OUT_OF_RANGE",
         messageParameters = Map(
           "exprName" -> "accuracy",
           "valueRange" -> s"(0, ${Int.MaxValue}]",
-          "currentValue" -> toSQLValue(accuracy, LongType)
+          "currentValue" -> toSQLValue(accuracy.longValue(), LongType)
         )
       )
     } else if (percentages == null) {
@@ -166,7 +179,11 @@ case class ApproximatePercentile(
   }
 
   override def createAggregationBuffer(): PercentileDigest = {
-    val relativeError = 1.0D / accuracy
+    val relativeError = if (allowFloatAccuracy) {
+      1.0D / accuracy.doubleValue()
+    } else {
+      1.0D / accuracy.longValue()
+    }
     new PercentileDigest(relativeError)
   }
 
