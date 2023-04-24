@@ -105,8 +105,10 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
 
   private def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {
     val command = request.getPlan.getCommand
-    val planner = new SparkConnectPlanner(session)
-    planner.process(command, request.getSessionId, responseObserver)
+    new SparkConnectCommandHandler(session).handle(
+      command,
+      request.getSessionId,
+      responseObserver)
     responseObserver.onCompleted()
   }
 }
