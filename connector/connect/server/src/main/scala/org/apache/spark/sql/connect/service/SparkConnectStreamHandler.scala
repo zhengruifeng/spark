@@ -80,17 +80,9 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
   }
 
   private def handlePlan(session: SparkSession, request: ExecutePlanRequest): Unit = {
-    val rel = request.getPlan.getRoot
-    val plan = rel.getRelTypeCase match {
-      case proto.Relation.RelTypeCase.CATALOG =>
-        // Catalog API (internal-only)
-        // Execute the catalog operation and convert the output to a local relation
-        new SparkConnectCatalogHandler(session).handle(rel.getCatalog)
-      case _ =>
-        // Extract the plan from the request and convert it to a logical plan
-        new SparkConnectPlanner(session).transformRelation(request.getPlan.getRoot)
-    }
-    val dataframe = Dataset.ofRows(session, plan)
+    // Extract the plan from the request and convert it to a logical plan
+    val planner = new SparkConnectPlanner(session)
+    val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
     responseObserver.onNext(
       SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(request.getSessionId, dataframe, responseObserver)

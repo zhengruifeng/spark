@@ -15,24 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.service
+package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Encoders, SparkSession}
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.connect.common.{InvalidPlanInput, StorageLevelProtoConverter}
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.types._
 
-private[connect] class SparkConnectCatalogHandler(session: SparkSession) extends Logging {
-  import SparkConnectCatalogHandler.emptyLocalRelation
+private[connect] class SparkConnectCatalog(planner: SparkConnectPlanner) extends Logging {
+  import SparkConnectCatalog.emptyLocalRelation
 
-  def handle(catalog: proto.Catalog): logical.LogicalPlan = {
+  private def session = planner.session
+
+  def process(catalog: proto.Catalog): logical.LogicalPlan = {
     catalog.getCatTypeCase match {
       case proto.Catalog.CatTypeCase.CURRENT_DATABASE =>
         transformCurrentDatabase(catalog.getCurrentDatabase)
@@ -198,7 +199,6 @@ private[connect] class SparkConnectCatalogHandler(session: SparkSession) extends
 
   private def transformCreateExternalTable(getCreateExternalTable: proto.CreateExternalTable) = {
     val schema = if (getCreateExternalTable.hasSchema) {
-      val planner = new SparkConnectPlanner(session)
       val struct = planner.transformDataType(getCreateExternalTable.getSchema)
       assert(struct.isInstanceOf[StructType])
       struct.asInstanceOf[StructType]
@@ -229,7 +229,6 @@ private[connect] class SparkConnectCatalogHandler(session: SparkSession) extends
 
   private def transformCreateTable(getCreateTable: proto.CreateTable) = {
     val schema = if (getCreateTable.hasSchema) {
-      val planner = new SparkConnectPlanner(session)
       val struct = planner.transformDataType(getCreateTable.getSchema)
       assert(struct.isInstanceOf[StructType])
       struct.asInstanceOf[StructType]
@@ -338,7 +337,7 @@ private[connect] class SparkConnectCatalogHandler(session: SparkSession) extends
   }
 }
 
-private[connect] object SparkConnectCatalogHandler {
+private[connect] object SparkConnectCatalog {
 
   val emptyLocalRelation = logical.LocalRelation(
     output = expressions.AttributeReference("value", StringType, false)() :: Nil,

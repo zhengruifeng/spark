@@ -141,6 +141,10 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 
+      // Catalog API (internal-only)
+      case proto.Relation.RelTypeCase.CATALOG =>
+        new SparkConnectCatalog(this).process(rel.getCatalog)
+
       // Handle plugins for Spark Connect Relation types.
       case proto.Relation.RelTypeCase.EXTENSION =>
         transformRelationPlugin(rel.getExtension)
