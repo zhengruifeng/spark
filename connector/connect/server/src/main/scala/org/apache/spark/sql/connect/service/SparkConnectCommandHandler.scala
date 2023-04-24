@@ -41,13 +41,11 @@ import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.streaming.Trigger
 
 private[connect] class SparkConnectCommandHandler(planner: SparkConnectPlanner) extends Logging {
-  def this(session: SparkSession) = {
-    this(new SparkConnectPlanner(session))
-  }
+  def this(session: SparkSession) = this(new SparkConnectPlanner(session))
 
-  private def session = planner.session
+  private val session = planner.session
 
-  def handle(
+  private[connect] def handle(
       command: proto.Command,
       sessionId: String,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
@@ -84,7 +82,7 @@ private[connect] class SparkConnectCommandHandler(planner: SparkConnectPlanner) 
     // Eagerly execute commands of the provided SQL string.
     val df = session.sql(
       getSqlCommand.getSql,
-      getSqlCommand.getArgsMap.asScala.mapValues(planner.transformLiteral).toMap)
+      getSqlCommand.getArgsMap.asScala.mapValues(planner.exprTransformer.transformLiteral).toMap)
     // Check if commands have been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[logical.CommandResult]
     val rows = df.logicalPlan match {
@@ -163,7 +161,7 @@ private[connect] class SparkConnectCommandHandler(planner: SparkConnectPlanner) 
 
   private def handleRegisterPythonUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
     val udf = fun.getPythonUdf
-    val function = planner.transformPythonFunction(udf)
+    val function = planner.exprTransformer.transformPythonFunction(udf)
     val udpf = UserDefinedPythonFunction(
       name = fun.getFunctionName,
       func = function,

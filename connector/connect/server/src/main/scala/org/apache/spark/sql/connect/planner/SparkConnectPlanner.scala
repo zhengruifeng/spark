@@ -20,26 +20,22 @@ package org.apache.spark.sql.connect.planner
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny}
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{Partition, TaskContext}
-import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.Parse.ParseFormat
-import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
-import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
-import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, Intersect, LocalRelation, LogicalPlan, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
@@ -58,8 +54,7 @@ final case class InvalidCommandInput(
     extends Exception(message, cause)
 
 class SparkConnectPlanner(val session: SparkSession) {
-  private lazy val pythonExec =
-    sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
+  private[connect] val exprTransformer = new ExpressionTransformer(this)
 
   // The root of the query plan is a relation and we apply the transformations to it.
   def transformRelation(rel: proto.Relation): LogicalPlan = {
@@ -181,7 +176,11 @@ class SparkConnectPlanner(val session: SparkSession) {
     val parser = session.sessionState.sqlParser
     val parsedPlan = parser.parsePlan(sql.getQuery)
     if (!args.isEmpty) {
-      ParameterizedQuery(parsedPlan, args.asScala.mapValues(transformLiteral).toMap)
+      ParameterizedQuery(
+        parsedPlan,
+        args.asScala
+          .mapValues(exprTransformer.transformLiteral)
+          .toMap)
     } else {
       parsedPlan
     }
@@ -386,7 +385,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformStatSampleBy(rel: proto.StatSampleBy): LogicalPlan = {
     val fractions = rel.getFractionsList.asScala.toSeq.map { protoFraction =>
-      val stratum = transformLiteral(protoFraction.getStratum) match {
+      val stratum = exprTransformer.transformLiteral(protoFraction.getStratum) match {
         case Literal(s, StringType) if s != null => s.toString
         case literal => literal.value
       }
@@ -427,7 +426,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
         transformTypedMapPartitions(commonUdf, baseRel)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
-        val pythonUdf = transformPythonUDF(commonUdf)
+        val pythonUdf = exprTransformer.transformPythonUDF(commonUdf)
         val isBarrier = if (rel.hasIsBarrier) rel.getIsBarrier else false
         pythonUdf.evalType match {
           case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
@@ -480,7 +479,7 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformGroupMap(rel: proto.GroupMap): LogicalPlan = {
-    val pythonUdf = transformPythonUDF(rel.getFunc)
+    val pythonUdf = exprTransformer.transformPythonUDF(rel.getFunc)
     val cols =
       rel.getGroupingExpressionsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
 
@@ -492,7 +491,7 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformCoGroupMap(rel: proto.CoGroupMap): LogicalPlan = {
-    val pythonUdf = transformPythonUDF(rel.getFunc)
+    val pythonUdf = exprTransformer.transformPythonUDF(rel.getFunc)
 
     val inputCols =
       rel.getInputGroupingExpressionsList.asScala.toSeq.map(expr =>
@@ -512,7 +511,7 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformApplyInPandasWithState(rel: proto.ApplyInPandasWithState): LogicalPlan = {
-    val pythonUdf = transformPythonUDF(rel.getFunc)
+    val pythonUdf = exprTransformer.transformPythonUDF(rel.getFunc)
     val cols =
       rel.getGroupingExpressionsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
 
@@ -865,9 +864,9 @@ class SparkConnectPlanner(val session: SparkSession) {
     def ds: Dataset[String] = Dataset(session, transformRelation(rel.getInput))(Encoders.STRING)
 
     rel.getFormat match {
-      case ParseFormat.PARSE_FORMAT_CSV =>
+      case proto.Parse.ParseFormat.PARSE_FORMAT_CSV =>
         dataFrameReader.csv(ds).queryExecution.analyzed
-      case ParseFormat.PARSE_FORMAT_JSON =>
+      case proto.Parse.ParseFormat.PARSE_FORMAT_JSON =>
         dataFrameReader.json(ds).queryExecution.analyzed
       case _ => throw InvalidPlanInput("Does not support " + rel.getFormat.name())
     }
@@ -921,88 +920,6 @@ class SparkConnectPlanner(val session: SparkSession) {
     logical.Project(projectList = projection, child = baseRel)
   }
 
-  /**
-   * Transforms an input protobuf expression into the Catalyst expression. This is usually not
-   * called directly. Typically the planner will traverse the expressions automatically, only
-   * plugins are expected to manually perform expression transformations.
-   *
-   * @param exp
-   *   the input expression
-   * @return
-   *   Catalyst expression
-   */
-  def transformExpression(exp: proto.Expression): Expression = {
-    exp.getExprTypeCase match {
-      case proto.Expression.ExprTypeCase.LITERAL => transformLiteral(exp.getLiteral)
-      case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>
-        transformUnresolvedAttribute(exp.getUnresolvedAttribute)
-      case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION =>
-        transformUnregisteredFunction(exp.getUnresolvedFunction)
-          .getOrElse(transformUnresolvedFunction(exp.getUnresolvedFunction))
-      case proto.Expression.ExprTypeCase.ALIAS => transformAlias(exp.getAlias)
-      case proto.Expression.ExprTypeCase.EXPRESSION_STRING =>
-        transformExpressionString(exp.getExpressionString)
-      case proto.Expression.ExprTypeCase.UNRESOLVED_STAR =>
-        transformUnresolvedStar(exp.getUnresolvedStar)
-      case proto.Expression.ExprTypeCase.CAST => transformCast(exp.getCast)
-      case proto.Expression.ExprTypeCase.UNRESOLVED_REGEX =>
-        transformUnresolvedRegex(exp.getUnresolvedRegex)
-      case proto.Expression.ExprTypeCase.UNRESOLVED_EXTRACT_VALUE =>
-        transformUnresolvedExtractValue(exp.getUnresolvedExtractValue)
-      case proto.Expression.ExprTypeCase.UPDATE_FIELDS =>
-        transformUpdateFields(exp.getUpdateFields)
-      case proto.Expression.ExprTypeCase.SORT_ORDER => transformSortOrder(exp.getSortOrder)
-      case proto.Expression.ExprTypeCase.LAMBDA_FUNCTION =>
-        transformLambdaFunction(exp.getLambdaFunction)
-      case proto.Expression.ExprTypeCase.UNRESOLVED_NAMED_LAMBDA_VARIABLE =>
-        transformUnresolvedNamedLambdaVariable(exp.getUnresolvedNamedLambdaVariable)
-      case proto.Expression.ExprTypeCase.WINDOW =>
-        transformWindowExpression(exp.getWindow)
-      case proto.Expression.ExprTypeCase.EXTENSION =>
-        transformExpressionPlugin(exp.getExtension)
-      case proto.Expression.ExprTypeCase.COMMON_INLINE_USER_DEFINED_FUNCTION =>
-        transformCommonInlineUserDefinedFunction(exp.getCommonInlineUserDefinedFunction)
-      case _ =>
-        throw InvalidPlanInput(
-          s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
-    }
-  }
-
-  private def toNamedExpression(expr: Expression): NamedExpression = expr match {
-    case named: NamedExpression => named
-    case expr => UnresolvedAlias(expr)
-  }
-
-  private def transformUnresolvedAttribute(
-      attr: proto.Expression.UnresolvedAttribute): UnresolvedAttribute = {
-    val expr = UnresolvedAttribute.quotedString(attr.getUnparsedIdentifier)
-    if (attr.hasPlanId) {
-      expr.setTagValue(LogicalPlan.PLAN_ID_TAG, attr.getPlanId)
-    }
-    expr
-  }
-
-  private def transformExpressionPlugin(extension: ProtoAny): Expression = {
-    SparkConnectPluginRegistry.expressionRegistry
-      // Lazily traverse the collection.
-      .view
-      // Apply the transformation.
-      .map(p => p.transform(extension, this))
-      // Find the first non-empty transformation or throw.
-      .find(_.nonEmpty)
-      .flatten
-      .getOrElse(throw InvalidPlanInput("No handler found for extension"))
-  }
-
-  /**
-   * Transforms the protocol buffers literals into the appropriate Catalyst literal expression.
-   * @return
-   *   Expression
-   */
-  private[connect] def transformLiteral(lit: proto.Expression.Literal): Literal = {
-    LiteralExpressionProtoConverter.toCatalystExpression(lit)
-  }
-
   private def transformLimit(limit: proto.Limit): LogicalPlan = {
     logical.Limit(
       limitExpr = expressions.Literal(limit.getLimit, IntegerType),
@@ -1019,483 +936,6 @@ class SparkConnectPlanner(val session: SparkSession) {
     logical.Offset(
       offsetExpr = expressions.Literal(offset.getOffset, IntegerType),
       transformRelation(offset.getInput))
-  }
-
-  /**
-   * Translates a scalar function from proto to the Catalyst expression.
-   *
-   * TODO(SPARK-40546) We need to homogenize the function names for binary operators.
-   *
-   * @param fun
-   *   Proto representation of the function call.
-   * @return
-   */
-  private def transformUnresolvedFunction(
-      fun: proto.Expression.UnresolvedFunction): Expression = {
-    if (fun.getIsUserDefinedFunction) {
-      UnresolvedFunction(
-        session.sessionState.sqlParser.parseFunctionIdentifier(fun.getFunctionName),
-        fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-        isDistinct = fun.getIsDistinct)
-    } else {
-      UnresolvedFunction(
-        FunctionIdentifier(fun.getFunctionName),
-        fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-        isDistinct = fun.getIsDistinct)
-    }
-  }
-
-  /**
-   * Translates a user-defined function from proto to the Catalyst expression.
-   *
-   * @param fun
-   *   Proto representation of the function call.
-   * @return
-   *   Expression.
-   */
-  private def transformCommonInlineUserDefinedFunction(
-      fun: proto.CommonInlineUserDefinedFunction): Expression = {
-    fun.getFunctionCase match {
-      case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
-        transformPythonUDF(fun)
-      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
-        transformScalarScalaUDF(fun)
-      case _ =>
-        throw InvalidPlanInput(
-          s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
-    }
-  }
-
-  /**
-   * Translates a Scalar Scala user-defined function from proto to the Catalyst expression.
-   *
-   * @param fun
-   *   Proto representation of the Scalar Scalar user-defined function.
-   * @return
-   *   ScalaUDF.
-   */
-  private def transformScalarScalaUDF(fun: proto.CommonInlineUserDefinedFunction): ScalaUDF = {
-    val udf = fun.getScalarScalaUdf
-    val udfPacket =
-      Utils.deserialize[UdfPacket](
-        udf.getPayload.toByteArray,
-        SparkConnectArtifactManager.classLoaderWithArtifacts)
-    ScalaUDF(
-      function = udfPacket.function,
-      dataType = transformDataType(udf.getOutputType),
-      children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-      inputEncoders = udfPacket.inputEncoders.map(e => Option(ExpressionEncoder(e))),
-      outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
-      udfName = Option(fun.getFunctionName),
-      nullable = udf.getNullable,
-      udfDeterministic = fun.getDeterministic)
-  }
-
-  /**
-   * Translates a Python user-defined function from proto to the Catalyst expression.
-   *
-   * @param fun
-   *   Proto representation of the Python user-defined function.
-   * @return
-   *   PythonUDF.
-   */
-  private def transformPythonUDF(fun: proto.CommonInlineUserDefinedFunction): PythonUDF = {
-    val udf = fun.getPythonUdf
-    PythonUDF(
-      name = fun.getFunctionName,
-      func = transformPythonFunction(udf),
-      dataType = transformDataType(udf.getOutputType),
-      children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-      evalType = udf.getEvalType,
-      udfDeterministic = fun.getDeterministic)
-  }
-
-  private[connect] def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
-    SimplePythonFunction(
-      command = fun.getCommand.toByteArray,
-      // Empty environment variables
-      envVars = Maps.newHashMap(),
-      // No imported Python libraries
-      pythonIncludes = Lists.newArrayList(),
-      pythonExec = pythonExec,
-      pythonVer = fun.getPythonVer,
-      // Empty broadcast variables
-      broadcastVars = Lists.newArrayList(),
-      // Null accumulator
-      accumulator = null)
-  }
-
-  /**
-   * Translates a LambdaFunction from proto to the Catalyst expression.
-   */
-  private def transformLambdaFunction(lambda: proto.Expression.LambdaFunction): LambdaFunction = {
-    if (lambda.getArgumentsCount == 0 || lambda.getArgumentsCount > 3) {
-      throw InvalidPlanInput(
-        "LambdaFunction requires 1 ~ 3 arguments, " +
-          s"but got ${lambda.getArgumentsCount} ones!")
-    }
-
-    LambdaFunction(
-      function = transformExpression(lambda.getFunction),
-      arguments = lambda.getArgumentsList.asScala.toSeq
-        .map(transformUnresolvedNamedLambdaVariable))
-  }
-
-  private def transformUnresolvedNamedLambdaVariable(
-      variable: proto.Expression.UnresolvedNamedLambdaVariable): UnresolvedNamedLambdaVariable = {
-    if (variable.getNamePartsCount == 0) {
-      throw InvalidPlanInput("UnresolvedNamedLambdaVariable requires at least one name part!")
-    }
-
-    UnresolvedNamedLambdaVariable(variable.getNamePartsList.asScala.toSeq)
-  }
-
-  /**
-   * For some reason, not all functions are registered in 'FunctionRegistry'. For a unregistered
-   * function, we can still wrap it under the proto 'UnresolvedFunction', and then resolve it in
-   * this method.
-   */
-  private def transformUnregisteredFunction(
-      fun: proto.Expression.UnresolvedFunction): Option[Expression] = {
-    fun.getFunctionName match {
-      case "product" if fun.getArgumentsCount == 1 =>
-        Some(
-          aggregate
-            .Product(transformExpression(fun.getArgumentsList.asScala.head))
-            .toAggregateExpression())
-
-      case "when" if fun.getArgumentsCount > 0 =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        Some(CaseWhen.createFromParser(children))
-
-      case "in" if fun.getArgumentsCount > 0 =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        Some(In(children.head, children.tail))
-
-      case "nth_value" if fun.getArgumentsCount == 3 =>
-        // NthValue does not have a constructor which accepts Expression typed 'ignoreNulls'
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        val ignoreNulls = extractBoolean(children(2), "ignoreNulls")
-        Some(NthValue(children(0), children(1), ignoreNulls))
-
-      case "lag" if fun.getArgumentsCount == 4 =>
-        // Lag does not have a constructor which accepts Expression typed 'ignoreNulls'
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        val ignoreNulls = extractBoolean(children(3), "ignoreNulls")
-        Some(Lag(children.head, children(1), children(2), ignoreNulls))
-
-      case "lead" if fun.getArgumentsCount == 4 =>
-        // Lead does not have a constructor which accepts Expression typed 'ignoreNulls'
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        val ignoreNulls = extractBoolean(children(3), "ignoreNulls")
-        Some(Lead(children.head, children(1), children(2), ignoreNulls))
-
-      case "window" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        val timeCol = children.head
-        val windowDuration = extractString(children(1), "windowDuration")
-        var slideDuration = windowDuration
-        if (fun.getArgumentsCount >= 3) {
-          slideDuration = extractString(children(2), "slideDuration")
-        }
-        var startTime = "0 second"
-        if (fun.getArgumentsCount == 4) {
-          startTime = extractString(children(3), "startTime")
-        }
-        Some(
-          Alias(TimeWindow(timeCol, windowDuration, slideDuration, startTime), "window")(
-            nonInheritableMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY)))
-
-      case "session_window" if fun.getArgumentsCount == 2 =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        val timeCol = children.head
-        val sessionWindow = children.last match {
-          case Literal(s, StringType) if s != null => SessionWindow(timeCol, s.toString)
-          case other => SessionWindow(timeCol, other)
-        }
-        Some(
-          Alias(sessionWindow, "session_window")(nonInheritableMetadataKeys =
-            Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY)))
-
-      case "bucket" if fun.getArgumentsCount == 2 =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        (children.head, children.last) match {
-          case (numBuckets: Literal, child) if numBuckets.dataType == IntegerType =>
-            Some(Bucket(numBuckets, child))
-          case (other, _) =>
-            throw InvalidPlanInput(s"numBuckets should be a literal integer, but got $other")
-        }
-
-      case "years" if fun.getArgumentsCount == 1 =>
-        Some(Years(transformExpression(fun.getArguments(0))))
-
-      case "months" if fun.getArgumentsCount == 1 =>
-        Some(Months(transformExpression(fun.getArguments(0))))
-
-      case "days" if fun.getArgumentsCount == 1 =>
-        Some(Days(transformExpression(fun.getArguments(0))))
-
-      case "hours" if fun.getArgumentsCount == 1 =>
-        Some(Hours(transformExpression(fun.getArguments(0))))
-
-      case "unwrap_udt" if fun.getArgumentsCount == 1 =>
-        Some(UnwrapUDT(transformExpression(fun.getArguments(0))))
-
-      case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
-        // JsonToStructs constructor doesn't accept JSON-formatted schema.
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-
-        var schema: DataType = null
-        children(1) match {
-          case Literal(s, StringType) if s != null =>
-            try {
-              schema = DataType.fromJson(s.toString)
-            } catch {
-              case _: Exception =>
-            }
-          case _ =>
-        }
-
-        if (schema != null) {
-          var options = Map.empty[String, String]
-          if (children.length == 3) {
-            options = extractMapData(children(2), "Options")
-          }
-          Some(
-            JsonToStructs(
-              schema = CharVarcharUtils.failIfHasCharVarchar(schema),
-              options = options,
-              child = children.head))
-        } else {
-          None
-        }
-
-      // Avro-specific functions
-      case "from_avro" if Seq(2, 3).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        val jsonFormatSchema = extractString(children(1), "jsonFormatSchema")
-        var options = Map.empty[String, String]
-        if (fun.getArgumentsCount == 3) {
-          options = extractMapData(children(2), "Options")
-        }
-        Some(AvroDataToCatalyst(children.head, jsonFormatSchema, options))
-
-      case "to_avro" if Seq(1, 2).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        var jsonFormatSchema = Option.empty[String]
-        if (fun.getArgumentsCount == 2) {
-          jsonFormatSchema = Some(extractString(children(1), "jsonFormatSchema"))
-        }
-        Some(CatalystDataToAvro(children.head, jsonFormatSchema))
-
-      // PS(Pandas API on Spark)-specific functions
-      case "distributed_sequence_id" if fun.getArgumentsCount == 0 =>
-        Some(DistributedSequenceID())
-
-      // ML-specific functions
-      case "vector_to_array" if fun.getArgumentsCount == 2 =>
-        val expr = transformExpression(fun.getArguments(0))
-        val dtype = extractString(transformExpression(fun.getArguments(1)), "dtype")
-        dtype match {
-          case "float64" =>
-            Some(transformUnregisteredUDF(MLFunctions.vectorToArrayUdf, Seq(expr)))
-          case "float32" =>
-            Some(transformUnregisteredUDF(MLFunctions.vectorToArrayFloatUdf, Seq(expr)))
-          case other =>
-            throw InvalidPlanInput(s"Unsupported dtype: $other. Valid values: float64, float32.")
-        }
-
-      case "array_to_vector" if fun.getArgumentsCount == 1 =>
-        val expr = transformExpression(fun.getArguments(0))
-        Some(transformUnregisteredUDF(MLFunctions.arrayToVectorUdf, Seq(expr)))
-
-      case _ => None
-    }
-  }
-
-  /**
-   * There are some built-in yet not registered UDFs, for example, 'ml.function.array_to_vector'.
-   * This method is to convert them to ScalaUDF expressions.
-   */
-  private def transformUnregisteredUDF(
-      fun: org.apache.spark.sql.expressions.UserDefinedFunction,
-      exprs: Seq[Expression]): ScalaUDF = {
-    val f = fun.asInstanceOf[org.apache.spark.sql.expressions.SparkUserDefinedFunction]
-    ScalaUDF(
-      function = f.f,
-      dataType = f.dataType,
-      children = exprs,
-      inputEncoders = f.inputEncoders,
-      outputEncoder = f.outputEncoder,
-      udfName = f.name,
-      nullable = f.nullable,
-      udfDeterministic = f.deterministic)
-  }
-
-  private def extractBoolean(expr: Expression, field: String): Boolean = expr match {
-    case Literal(bool: Boolean, BooleanType) => bool
-    case other => throw InvalidPlanInput(s"$field should be a literal boolean, but got $other")
-  }
-
-  private def extractString(expr: Expression, field: String): String = expr match {
-    case Literal(s, StringType) if s != null => s.toString
-    case other => throw InvalidPlanInput(s"$field should be a literal string, but got $other")
-  }
-
-  private def extractMapData(expr: Expression, field: String): Map[String, String] = expr match {
-    case map: CreateMap => ExprUtils.convertToMapData(map)
-    case UnresolvedFunction(Seq("map"), args, _, _, _) => extractMapData(CreateMap(args), field)
-    case other => throw InvalidPlanInput(s"$field should be created by map, but got $other")
-  }
-
-  private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
-    if (alias.getNameCount == 1) {
-      val metadata = if (alias.hasMetadata() && alias.getMetadata.nonEmpty) {
-        Some(Metadata.fromJson(alias.getMetadata))
-      } else {
-        None
-      }
-      Alias(transformExpression(alias.getExpr), alias.getName(0))(explicitMetadata = metadata)
-    } else {
-      if (alias.hasMetadata) {
-        throw InvalidPlanInput(
-          "Alias expressions with more than 1 identifier must not use optional metadata.")
-      }
-      MultiAlias(transformExpression(alias.getExpr), alias.getNameList.asScala.toSeq)
-    }
-  }
-
-  private def transformExpressionString(expr: proto.Expression.ExpressionString): Expression = {
-    session.sessionState.sqlParser.parseExpression(expr.getExpression)
-  }
-
-  private def transformUnresolvedStar(star: proto.Expression.UnresolvedStar): UnresolvedStar = {
-    if (star.hasUnparsedTarget) {
-      val target = star.getUnparsedTarget
-      if (!target.endsWith(".*")) {
-        throw InvalidPlanInput(
-          s"UnresolvedStar requires a unparsed target ending with '.*', " +
-            s"but got $target.")
-      }
-
-      UnresolvedStar(
-        Some(UnresolvedAttribute.parseAttributeName(target.substring(0, target.length - 2))))
-    } else {
-      UnresolvedStar(None)
-    }
-  }
-
-  private def transformCast(cast: proto.Expression.Cast): Expression = {
-    cast.getCastToTypeCase match {
-      case proto.Expression.Cast.CastToTypeCase.TYPE =>
-        Cast(transformExpression(cast.getExpr), transformDataType(cast.getType))
-      case _ =>
-        Cast(
-          transformExpression(cast.getExpr),
-          session.sessionState.sqlParser.parseDataType(cast.getTypeStr))
-    }
-  }
-
-  private def transformUnresolvedRegex(regex: proto.Expression.UnresolvedRegex): Expression = {
-    val caseSensitive = session.sessionState.conf.caseSensitiveAnalysis
-    regex.getColName match {
-      case ParserUtils.escapedIdentifier(columnNameRegex) =>
-        UnresolvedRegex(columnNameRegex, None, caseSensitive)
-      case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
-        UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive)
-      case _ =>
-        val expr = UnresolvedAttribute.quotedString(regex.getColName)
-        if (regex.hasPlanId) {
-          expr.setTagValue(LogicalPlan.PLAN_ID_TAG, regex.getPlanId)
-        }
-        expr
-    }
-  }
-
-  private def transformUnresolvedExtractValue(
-      extract: proto.Expression.UnresolvedExtractValue): UnresolvedExtractValue = {
-    UnresolvedExtractValue(
-      transformExpression(extract.getChild),
-      transformExpression(extract.getExtraction))
-  }
-
-  private def transformUpdateFields(update: proto.Expression.UpdateFields): UpdateFields = {
-    if (update.hasValueExpression) {
-      // add or replace a field
-      UpdateFields.apply(
-        col = transformExpression(update.getStructExpression),
-        fieldName = update.getFieldName,
-        expr = transformExpression(update.getValueExpression))
-    } else {
-      // drop a field
-      UpdateFields.apply(
-        col = transformExpression(update.getStructExpression),
-        fieldName = update.getFieldName)
-    }
-  }
-
-  private def transformWindowExpression(window: proto.Expression.Window) = {
-    if (!window.hasWindowFunction) {
-      throw InvalidPlanInput(s"WindowFunction is required in WindowExpression")
-    }
-
-    val frameSpec = if (window.hasFrameSpec) {
-      val protoFrameSpec = window.getFrameSpec
-
-      val frameType = protoFrameSpec.getFrameType match {
-        case proto.Expression.Window.WindowFrame.FrameType.FRAME_TYPE_ROW => RowFrame
-
-        case proto.Expression.Window.WindowFrame.FrameType.FRAME_TYPE_RANGE => RangeFrame
-
-        case other => throw InvalidPlanInput(s"Unknown FrameType $other")
-      }
-
-      if (!protoFrameSpec.hasLower) {
-        throw InvalidPlanInput(s"LowerBound is required in WindowFrame")
-      }
-      val lower = protoFrameSpec.getLower.getBoundaryCase match {
-        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.CURRENT_ROW =>
-          CurrentRow
-
-        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.UNBOUNDED =>
-          UnboundedPreceding
-
-        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.VALUE =>
-          transformExpression(protoFrameSpec.getLower.getValue)
-
-        case other => throw InvalidPlanInput(s"Unknown FrameBoundary $other")
-      }
-
-      if (!protoFrameSpec.hasUpper) {
-        throw InvalidPlanInput(s"UpperBound is required in WindowFrame")
-      }
-      val upper = protoFrameSpec.getUpper.getBoundaryCase match {
-        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.CURRENT_ROW =>
-          CurrentRow
-
-        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.UNBOUNDED =>
-          UnboundedFollowing
-
-        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.VALUE =>
-          transformExpression(protoFrameSpec.getUpper.getValue)
-
-        case other => throw InvalidPlanInput(s"Unknown FrameBoundary $other")
-      }
-
-      SpecifiedWindowFrame(frameType = frameType, lower = lower, upper = upper)
-
-    } else {
-      UnspecifiedFrame
-    }
-
-    val windowSpec = WindowSpecDefinition(
-      partitionSpec = window.getPartitionSpecList.asScala.toSeq.map(transformExpression),
-      orderSpec = window.getOrderSpecList.asScala.toSeq.map(transformSortOrder),
-      frameSpecification = frameSpec)
-
-    WindowExpression(
-      windowFunction = transformExpression(window.getWindowFunction),
-      windowSpec = windowSpec)
   }
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {
@@ -1575,23 +1015,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     logical.Sort(
       child = transformRelation(sort.getInput),
       global = sort.getIsGlobal,
-      order = sort.getOrderList.asScala.toSeq.map(transformSortOrder))
-  }
-
-  private def transformSortOrder(order: proto.Expression.SortOrder) = {
-    expressions.SortOrder(
-      child = transformExpression(order.getChild),
-      direction = order.getDirection match {
-        case proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING =>
-          expressions.Ascending
-        case _ => expressions.Descending
-      },
-      nullOrdering = order.getNullOrdering match {
-        case proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST =>
-          expressions.NullsFirst
-        case _ => expressions.NullsLast
-      },
-      sameOrderExpressions = Seq.empty)
+      order = sort.getOrderList.asScala.toSeq.map(exprTransformer.transformSortOrder))
   }
 
   private def transformDrop(rel: proto.Drop): LogicalPlan = {
@@ -1643,7 +1067,8 @@ class SparkConnectPlanner(val session: SparkSession) {
 
         val pivotExpr = transformExpression(rel.getPivot.getCol)
 
-        var valueExprs = rel.getPivot.getValuesList.asScala.toSeq.map(transformLiteral)
+        var valueExprs = rel.getPivot.getValuesList.asScala.toSeq
+          .map(exprTransformer.transformLiteral)
         if (valueExprs.isEmpty) {
           // This is to prevent unintended OOM errors when the number of distinct values is large
           val maxValues = session.sessionState.conf.dataFramePivotMaxValues
@@ -1670,6 +1095,25 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       case other => throw InvalidPlanInput(s"Unknown Group Type $other")
     }
+  }
+
+  private def toNamedExpression(expr: Expression): NamedExpression = expr match {
+    case named: NamedExpression => named
+    case expr => UnresolvedAlias(expr)
+  }
+
+  /**
+   * Transforms an input protobuf expression into the Catalyst expression. This is usually not
+   * called directly. Typically the planner will traverse the expressions automatically, only
+   * plugins are expected to manually perform expression transformations.
+   *
+   * @param exp
+   *   the input expression
+   * @return
+   *   Catalyst expression
+   */
+  def transformExpression(exp: proto.Expression): Expression = {
+    exprTransformer.transform(exp)
   }
 
   def process(

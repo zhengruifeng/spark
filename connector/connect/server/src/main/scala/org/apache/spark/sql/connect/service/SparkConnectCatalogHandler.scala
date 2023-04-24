@@ -32,13 +32,11 @@ import org.apache.spark.sql.types._
 private[connect] class SparkConnectCatalogHandler(planner: SparkConnectPlanner) extends Logging {
   import SparkConnectCatalogHandler.emptyLocalRelation
 
-  def this(session: SparkSession) = {
-    this(new SparkConnectPlanner(session))
-  }
+  def this(session: SparkSession) = this(new SparkConnectPlanner(session))
 
-  private def session = planner.session
+  private val session = planner.session
 
-  def handle(catalog: proto.Catalog): logical.LogicalPlan = {
+  private[connect] def handle(catalog: proto.Catalog): logical.LogicalPlan = {
     catalog.getCatTypeCase match {
       case proto.Catalog.CatTypeCase.CURRENT_DATABASE =>
         transformCurrentDatabase(catalog.getCurrentDatabase)
