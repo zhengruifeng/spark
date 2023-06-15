@@ -1364,6 +1364,7 @@ class Column(val expr: Expression) extends Logging {
    */
   def over(): Column = over(Window.spec)
 
+  def outer(): Column = Column(OuterReference(this.named))
 }
 
 

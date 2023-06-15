@@ -4172,6 +4172,65 @@ class Dataset[T] private[sql](
   }
 
   ////////////////////////////////////////////////////////////////////////////
+  // For Subquery
+  ////////////////////////////////////////////////////////////////////////////
+
+  def subquery(cols: Seq[Column]): Subquery = {
+    val untypedCols = cols.map {
+      case typedCol: TypedColumn[_, _] =>
+        // Checks if a `TypedColumn` has been inserted with
+        // specific input type and schema by `withInputType`.
+        val needInputType = typedCol.expr.exists {
+          case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty => true
+          case _ => false
+        }
+
+        if (!needInputType) {
+          typedCol
+        } else {
+          throw QueryCompilationErrors.cannotPassTypedColumnInUntypedSelectError(typedCol.toString)
+        }
+
+      case other => other
+    }
+
+    new Subquery(this.logicalPlan, untypedCols.map(_.named))
+  }
+
+  def lateralJoin(
+      subquery: Subquery): DataFrame = withPlan {
+    LateralJoin(
+      logicalPlan,
+      subquery.lateral,
+      Inner,
+      None
+    )
+  }
+
+  def lateralJoin(
+      subquery: Subquery,
+      joinType: String): DataFrame = withPlan {
+    LateralJoin(
+      logicalPlan,
+      subquery.lateral,
+      JoinType.apply(joinType),
+      None
+    )
+  }
+
+  def lateralJoin(
+      subquery: Subquery,
+      condition: Column,
+      joinType: String): DataFrame = withPlan {
+    LateralJoin(
+      logicalPlan,
+      subquery.lateral,
+      JoinType.apply(joinType),
+      Some(condition.expr)
+    )
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
   // For Python API
   ////////////////////////////////////////////////////////////////////////////
 
