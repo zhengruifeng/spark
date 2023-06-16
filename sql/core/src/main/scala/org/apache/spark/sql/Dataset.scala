@@ -4179,9 +4179,10 @@ class Dataset[T] private[sql](
   // For Subquery
   ////////////////////////////////////////////////////////////////////////////
 
-  def subquery(cols: Seq[Column]): Subquery = {
+  @scala.annotation.varargs
+  def subquery(cols: Column*): Subquery = {
     val untypedCols = cols.map(toUntyped)
-    new Subquery(this.logicalPlan, untypedCols.map(_.named))
+    new Subquery(logicalPlan, untypedCols.map(_.named))
   }
 
   def lateralJoin(
@@ -4215,6 +4216,16 @@ class Dataset[T] private[sql](
       JoinType.apply(joinType),
       Some(condition.expr)
     )
+  }
+
+  def in(subquery: Subquery): Column = {
+    assert(logicalPlan.output.size > 0)
+    val value = if (logicalPlan.output.size == 1) {
+      logicalPlan.output.head
+    } else {
+      CreateNamedStruct(logicalPlan.output)
+    }
+    Column(In(value, Seq(subquery.list)))
   }
 
   ////////////////////////////////////////////////////////////////////////////

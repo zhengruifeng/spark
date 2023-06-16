@@ -44,4 +44,20 @@ class Subquery(
       LateralSubquery(Project(expressions, Filter(conditions.reduce(And), plan)))
     }
   }
+
+  def list: ListQuery = {
+    if (conditions.isEmpty) {
+      ListQuery(Project(expressions, plan))
+    } else {
+      ListQuery(Project(expressions, Filter(conditions.reduce(And), plan)))
+    }
+  }
+
+  def exists: Column = {
+    if (conditions.isEmpty) {
+      Column(Exists(Project(expressions, plan)))
+    } else {
+      Column(Exists(Project(expressions, Filter(conditions.reduce(And), plan))))
+    }
+  }
 }
