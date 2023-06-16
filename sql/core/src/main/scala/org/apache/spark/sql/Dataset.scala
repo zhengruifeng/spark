@@ -1604,7 +1604,12 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def select(cols: Column*): DataFrame = withPlan {
-    val untypedCols = cols.map {
+    val untypedCols = cols.map(toUntyped)
+    Project(untypedCols.map(_.named), logicalPlan)
+  }
+
+  private def toUntyped(col: Column): Column = {
+    col match {
       case typedCol: TypedColumn[_, _] =>
         // Checks if a `TypedColumn` has been inserted with
         // specific input type and schema by `withInputType`.
@@ -1621,7 +1626,6 @@ class Dataset[T] private[sql](
 
       case other => other
     }
-    Project(untypedCols.map(_.named), logicalPlan)
   }
 
   /**
@@ -4176,24 +4180,7 @@ class Dataset[T] private[sql](
   ////////////////////////////////////////////////////////////////////////////
 
   def subquery(cols: Seq[Column]): Subquery = {
-    val untypedCols = cols.map {
-      case typedCol: TypedColumn[_, _] =>
-        // Checks if a `TypedColumn` has been inserted with
-        // specific input type and schema by `withInputType`.
-        val needInputType = typedCol.expr.exists {
-          case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty => true
-          case _ => false
-        }
-
-        if (!needInputType) {
-          typedCol
-        } else {
-          throw QueryCompilationErrors.cannotPassTypedColumnInUntypedSelectError(typedCol.toString)
-        }
-
-      case other => other
-    }
-
+    val untypedCols = cols.map(toUntyped)
     new Subquery(this.logicalPlan, untypedCols.map(_.named))
   }
 
