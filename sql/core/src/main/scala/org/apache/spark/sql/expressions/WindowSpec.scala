@@ -210,6 +210,36 @@ class WindowSpec private[sql](
       SpecifiedWindowFrame(RangeFrame, boundaryStart, boundaryEnd))
   }
 
+  override def toString: String = {
+    val builder = new StringBuilder
+
+    builder.append("WindowSpec: [partition: [")
+    val partStr = partitionSpec.take(2).map {
+      case expr: NamedExpression if expr.resolved =>
+        s"${expr.name}: ${expr.dataType.simpleString(2)}"
+      case expr: NamedExpression => expr.name
+      case o => o.toString
+    }.mkString(", ")
+    builder.append(partStr)
+    if (partitionSpec.length > 2) {
+      builder.append(" ... " + (partitionSpec.length - 2) + " more field(s)")
+    }
+
+    builder.append(s"], order: [")
+    builder.append(orderSpec.take(2).map(_.sql).mkString(", "))
+    if (orderSpec.length > 2) {
+      builder.append(" ... " + (orderSpec.length - 2) + " more field(s)")
+    }
+
+    builder.append(s"], frame: ")
+    frame match {
+      case f: SpecifiedWindowFrame => builder.append(f.sql)
+      case _ => builder.append("UNSPECIFIED")
+    }
+    builder.append("]").toString()
+  }
+
+
   /**
    * Converts this [[WindowSpec]] into a [[Column]] with an aggregate expression.
    */

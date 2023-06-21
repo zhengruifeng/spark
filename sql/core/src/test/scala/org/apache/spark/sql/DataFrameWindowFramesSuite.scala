@@ -513,4 +513,72 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       df,
       Row(1) :: Row(1) :: Nil)
   }
+
+  test("WindowSpec toString") {
+    val df = Seq((1L, "1"), (1L, "1")).toDF("key", "value")
+
+    assert(
+      Window.partitionBy("key").toString ===
+        "WindowSpec: [partition: [key], order: [], frame: UNSPECIFIED]"
+    )
+
+    assert(
+      Window.partitionBy(df.col("key")).toString ===
+        "WindowSpec: [partition: [key: bigint], order: [], frame: UNSPECIFIED]"
+    )
+
+    assert(
+      Window.partitionBy("k1", "k2", "k3").toString ===
+        "WindowSpec: [partition: [k1, k2 ... 1 more field(s)], order: [], frame: UNSPECIFIED]"
+    )
+
+    assert(
+      Window.orderBy("value").toString ===
+        "WindowSpec: [partition: [], order: [value ASC NULLS FIRST], frame: UNSPECIFIED]"
+    )
+
+    assert(
+      Window.partitionBy("key").orderBy("value").toString ===
+        "WindowSpec: [partition: [key], order: [value ASC NULLS FIRST], frame: UNSPECIFIED]"
+    )
+
+    assert(
+      Window.partitionBy("key").orderBy(df.col("value")).toString ===
+        "WindowSpec: [partition: [key], order: [value ASC NULLS FIRST], frame: UNSPECIFIED]"
+    )
+
+    assert(
+      Window.partitionBy("key").orderBy(df.col("value").asc_nulls_last).toString ===
+        "WindowSpec: [partition: [key], order: [value ASC NULLS LAST], frame: UNSPECIFIED]"
+    )
+
+    assert(
+      Window.partitionBy("key").orderBy(df.col("value").desc).toString ===
+        "WindowSpec: [partition: [key], order: [value DESC NULLS LAST], frame: UNSPECIFIED]"
+    )
+
+    assert(
+      Window.orderBy(col("v1").desc, col("v2").asc, col("v3")).toString ===
+        "WindowSpec: [partition: [], " +
+          "order: [v1 DESC NULLS LAST, v2 ASC NULLS FIRST ... 1 more field(s)], frame: UNSPECIFIED]"
+    )
+
+    assert(
+      Window.partitionBy("key").orderBy("v1", "v2", "v3").toString ===
+        "WindowSpec: [partition: [key], " +
+          "order: [v1 ASC NULLS FIRST, v2 ASC NULLS FIRST ... 1 more field(s)], frame: UNSPECIFIED]"
+    )
+
+    assert(
+      Window.partitionBy("key").orderBy("value").rowsBetween(Window.currentRow, 1).toString ===
+        "WindowSpec: [partition: [key], order: [value ASC NULLS FIRST], " +
+          "frame: ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING]"
+    )
+
+    assert(
+      Window.partitionBy("key").orderBy("value").rangeBetween(Window.currentRow, 1).toString ===
+        "WindowSpec: [partition: [key], order: [value ASC NULLS FIRST], " +
+          "frame: RANGE BETWEEN CURRENT ROW AND 1L FOLLOWING]"
+    )
+  }
 }
