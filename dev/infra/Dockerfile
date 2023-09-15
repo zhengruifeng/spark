@@ -59,17 +59,43 @@ RUN apt-get update && apt-get install -y \
     libfreetype6-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
 
-RUN add-apt-repository ppa:pypy/ppa
+RUN curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh && \
+    bash miniconda.sh -b -p $HOME/miniconda && \
+    rm miniconda.sh
+ENV PATH="$HOME/miniconda/bin:$PATH"
+RUN $HOME/miniconda/bin/conda init
+RUN $HOME/miniconda/bin/conda update -y conda
 
-RUN mkdir -p /usr/local/pypy/pypy3.8 && \
-    curl -sqL https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.8 --strip-components=1 && \
-    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3.8 && \
-    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3
+RUN $HOME/miniconda/bin/conda create --force -n spark_test_py39 python=3.9 && \
+    $HOME/miniconda/bin/conda activate spark_test_py39 && \
+    pip install numpy pyarrow 'pandas<=2.1.0' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*' && \
+    pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4' && \
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    pip install torcheval deepspeed && \
+    $HOME/miniconda/bin/conda deactivate
 
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
 
+RUN $HOME/miniconda/bin/conda create --force -n spark_test_py310 python=3.10 && \
+    $HOME/miniconda/bin/conda activate spark_test_py310 && \
+    pip install numpy pyarrow 'pandas<=2.1.0' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*' && \
+    pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4' && \
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    pip install torcheval deepspeed && \
+    $HOME/miniconda/bin/conda deactivate
+
+
+RUN $HOME/miniconda/bin/conda create --force -n spark_test_py311 python=3.11 && \
+    $HOME/miniconda/bin/conda activate spark_test_py311 && \
+    pip install numpy pyarrow 'pandas<=2.1.0' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*' && \
+    pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4' && \
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    pip install torcheval deepspeed && \
+    $HOME/miniconda/bin/conda deactivate
+
+
+
+# R
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
 RUN gpg -a --export E084DAB9 | apt-key add -
@@ -84,14 +110,15 @@ RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='ht
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
+
+# pypy 3.8
+RUN add-apt-repository ppa:pypy/ppa
+
+RUN mkdir -p /usr/local/pypy/pypy3.8 && \
+    curl -sqL https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.8 --strip-components=1 && \
+    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3.8 && \
+    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3
+
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
+
 RUN pypy3 -m pip install numpy 'pandas<=2.1.0' scipy coverage matplotlib
-RUN python3.9 -m pip install numpy pyarrow 'pandas<=2.1.0' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
-
-# Add Python deps for Spark Connect.
-RUN python3.9 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
-
-# Add torch as a testing dependency for TorchDistributor
-RUN python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-RUN python3.9 -m pip install torcheval
-# Add Deepspeed as a testing dependency for DeepspeedTorchDistributor
-RUN python3.9 -m pip install deepspeed
