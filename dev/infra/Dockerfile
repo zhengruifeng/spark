@@ -43,6 +43,8 @@ RUN apt-get update && apt-get install -y \
     python3-setuptools  \
     python3.8  \
     python3.9 \
+    python3.10 \
+    python3.11 \
     r-base  \
     libcurl4-openssl-dev  \
     qpdf  \
@@ -59,17 +61,8 @@ RUN apt-get update && apt-get install -y \
     libfreetype6-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
 
-RUN add-apt-repository ppa:pypy/ppa
-
-RUN mkdir -p /usr/local/pypy/pypy3.8 && \
-    curl -sqL https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.8 --strip-components=1 && \
-    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3.8 && \
-    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3
-
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-
+# R
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
 RUN gpg -a --export E084DAB9 | apt-key add -
@@ -84,7 +77,23 @@ RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='ht
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
+
+# pypy 3.8
+RUN add-apt-repository ppa:pypy/ppa
+
+RUN mkdir -p /usr/local/pypy/pypy3.8 && \
+    curl -sqL https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.8 --strip-components=1 && \
+    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3.8 && \
+    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3
+
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
+
 RUN pypy3 -m pip install numpy 'pandas<=2.0.3' scipy coverage matplotlib
+
+
+# python 3.9
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
+
 RUN python3.9 -m pip install numpy pyarrow 'pandas<=2.0.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
 
 # Add Python deps for Spark Connect.
@@ -95,3 +104,31 @@ RUN python3.9 -m pip install torch torchvision --index-url https://download.pyto
 RUN python3.9 -m pip install torcheval
 # Add Deepspeed as a testing dependency for DeepspeedTorchDistributor
 RUN python3.9 -m pip install deepspeed
+
+
+# python 3.10
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
+
+RUN python3.10 -m pip install numpy pyarrow 'pandas<=2.0.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
+
+# Add Python deps for Spark Connect.
+RUN python3.10 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
+
+# Add torch as a testing dependency for TorchDistributor and DeepspeedTorchDistributor
+RUN python3.10 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+RUN python3.10 -m pip install torcheval deepspeed
+
+
+# python 3.11
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+
+RUN python3.11 -m pip install numpy pyarrow 'pandas<=2.0.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
+
+# Add Python deps for Spark Connect.
+RUN python3.11 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
+
+# Add torch as a testing dependency for TorchDistributor and DeepspeedTorchDistributor
+RUN python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+RUN python3.11 -m pip install torcheval deepspeed
+
+
