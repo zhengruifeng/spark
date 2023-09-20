@@ -64,10 +64,9 @@ RUN curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.s
     bash miniconda.sh -b -p $HOME/miniconda && \
     rm miniconda.sh
 ENV PATH="$HOME/miniconda/bin:$PATH"
-RUN $HOME/miniconda/bin/conda init
-RUN $HOME/miniconda/bin/conda update -y conda
 
-RUN $HOME/miniconda/bin/conda create --force -n spark_test_py39 python=3.9 && \
+RUN $HOME/miniconda/bin/conda init && \
+    $HOME/miniconda/bin/conda create --force -n spark_test_py39 python=3.9 && \
     $HOME/miniconda/bin/conda activate spark_test_py39 && \
     pip install numpy pyarrow 'pandas<=2.1.0' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*' && \
     pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4' && \
@@ -76,7 +75,8 @@ RUN $HOME/miniconda/bin/conda create --force -n spark_test_py39 python=3.9 && \
     $HOME/miniconda/bin/conda deactivate
 
 
-RUN $HOME/miniconda/bin/conda create --force -n spark_test_py310 python=3.10 && \
+RUN $HOME/miniconda/bin/conda init && \
+    $HOME/miniconda/bin/conda create --force -n spark_test_py310 python=3.10 && \
     $HOME/miniconda/bin/conda activate spark_test_py310 && \
     pip install numpy pyarrow 'pandas<=2.1.0' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*' && \
     pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4' && \
@@ -85,7 +85,8 @@ RUN $HOME/miniconda/bin/conda create --force -n spark_test_py310 python=3.10 && 
     $HOME/miniconda/bin/conda deactivate
 
 
-RUN $HOME/miniconda/bin/conda create --force -n spark_test_py311 python=3.11 && \
+RUN $HOME/miniconda/bin/conda init && \
+    $HOME/miniconda/bin/conda create --force -n spark_test_py311 python=3.11 && \
     $HOME/miniconda/bin/conda activate spark_test_py311 && \
     pip install numpy pyarrow 'pandas<=2.1.0' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*' && \
     pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4' && \
