@@ -218,8 +218,7 @@ def _options_to_col(options: Optional[Dict[str, Any]] = None) -> Column:
         for k, v in options.items():
             _options.append(lit(str(k)))
             _options.append(lit(str(v)))
-    # make sure empty map has the proper type 'map<string, string>'
-    return create_map(*_options).cast("map<string, string>")
+    return create_map(*_options)
 
 
 # Normal Functions
