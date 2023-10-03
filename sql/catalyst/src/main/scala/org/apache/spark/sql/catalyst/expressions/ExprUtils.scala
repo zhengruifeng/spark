@@ -58,7 +58,7 @@ object ExprUtils extends QueryErrorsBase {
       ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
         key.toString -> value.toString
       }
-    case m: CreateMap if m.children.isEmpty => Map.empty
+    case m: CreateMap if m.children.isEmpty => Map.empty[String, String]
     case m: CreateMap =>
       throw QueryCompilationErrors.keyValueInMapNotStringError(m)
     case _ =>
