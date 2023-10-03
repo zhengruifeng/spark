@@ -212,12 +212,14 @@ def _invoke_higher_order_function(
     return _invoke_function(name, *_cols, *_funs)
 
 
-def _options_to_col(options: Dict[str, Any]) -> Column:
+def _options_to_col(options: Optional[Dict[str, Any]] = None) -> Column:
     _options: List[Column] = []
-    for k, v in options.items():
-        _options.append(lit(str(k)))
-        _options.append(lit(str(v)))
-    return create_map(*_options)
+    if options is not None:
+        for k, v in options.items():
+            _options.append(lit(str(k)))
+            _options.append(lit(str(v)))
+    # make sure empty map has the proper type 'map<string, string>'
+    return create_map(*_options).cast("map<string, string>")
 
 
 # Normal Functions
@@ -1822,10 +1824,7 @@ def from_csv(
             message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
-    if options is None:
-        return _invoke_function("from_csv", _to_col(col), _schema)
-    else:
-        return _invoke_function("from_csv", _to_col(col), _schema, _options_to_col(options))
+    return _invoke_function("from_csv", _to_col(col), _schema, _options_to_col(options))
 
 
 from_csv.__doc__ = pysparkfuncs.from_csv.__doc__
@@ -1848,10 +1847,7 @@ def from_json(
             message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
-    if options is None:
-        return _invoke_function("from_json", _to_col(col), _schema)
-    else:
-        return _invoke_function("from_json", _to_col(col), _schema, _options_to_col(options))
+    return _invoke_function("from_json", _to_col(col), _schema, _options_to_col(options))
 
 
 from_json.__doc__ = pysparkfuncs.from_json.__doc__
@@ -1874,10 +1870,7 @@ def from_xml(
             message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
-    if options is None:
-        return _invoke_function("from_xml", _to_col(col), _schema)
-    else:
-        return _invoke_function("from_xml", _to_col(col), _schema, _options_to_col(options))
+    return _invoke_function("from_xml", _to_col(col), _schema, _options_to_col(options))
 
 
 from_xml.__doc__ = pysparkfuncs.from_xml.__doc__
@@ -2063,10 +2056,7 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
             message_parameters={"arg_name": "csv", "arg_type": type(csv).__name__},
         )
 
-    if options is None:
-        return _invoke_function("schema_of_csv", _csv)
-    else:
-        return _invoke_function("schema_of_csv", _csv, _options_to_col(options))
+    return _invoke_function("schema_of_csv", _csv, _options_to_col(options))
 
 
 schema_of_csv.__doc__ = pysparkfuncs.schema_of_csv.__doc__
@@ -2083,10 +2073,7 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
             message_parameters={"arg_name": "json", "arg_type": type(json).__name__},
         )
 
-    if options is None:
-        return _invoke_function("schema_of_json", _json)
-    else:
-        return _invoke_function("schema_of_json", _json, _options_to_col(options))
+    return _invoke_function("schema_of_json", _json, _options_to_col(options))
 
 
 schema_of_json.__doc__ = pysparkfuncs.schema_of_json.__doc__
@@ -2103,10 +2090,7 @@ def schema_of_xml(xml: "ColumnOrName", options: Optional[Dict[str, str]] = None)
             message_parameters={"arg_name": "xml", "arg_type": type(xml).__name__},
         )
 
-    if options is None:
-        return _invoke_function("schema_of_xml", _xml)
-    else:
-        return _invoke_function("schema_of_xml", _xml, _options_to_col(options))
+    return _invoke_function("schema_of_xml", _xml, _options_to_col(options))
 
 
 schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
@@ -2181,20 +2165,14 @@ named_struct.__doc__ = pysparkfuncs.named_struct.__doc__
 
 
 def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
-    if options is None:
-        return _invoke_function("to_csv", _to_col(col))
-    else:
-        return _invoke_function("to_csv", _to_col(col), _options_to_col(options))
+    return _invoke_function("to_csv", _to_col(col), _options_to_col(options))
 
 
 to_csv.__doc__ = pysparkfuncs.to_csv.__doc__
 
 
 def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
-    if options is None:
-        return _invoke_function("to_json", _to_col(col))
-    else:
-        return _invoke_function("to_json", _to_col(col), _options_to_col(options))
+    return _invoke_function("to_json", _to_col(col), _options_to_col(options))
 
 
 to_json.__doc__ = pysparkfuncs.to_json.__doc__
