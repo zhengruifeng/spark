@@ -18,7 +18,7 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.ml.linalg.SQLDataTypes
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
@@ -134,7 +134,7 @@ abstract class Predictor[
    *
    * The default value is VectorUDT, but it may be overridden if FeaturesType is not Vector.
    */
-  private[ml] def featuresDataType: DataType = new VectorUDT
+  private[ml] def featuresDataType: DataType = SQLDataTypes.VectorType
 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, featuresDataType)
@@ -170,7 +170,7 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
    *
    * The default value is VectorUDT, but it may be overridden if FeaturesType is not Vector.
    */
-  protected def featuresDataType: DataType = new VectorUDT
+  protected def featuresDataType: DataType = SQLDataTypes.VectorType
 
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema, fitting = false, featuresDataType)

@@ -19,7 +19,7 @@ package org.apache.spark.ml.attribute
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.ml.linalg.SQLDataTypes
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField}
 
 /**
@@ -154,7 +154,7 @@ class AttributeGroup private (
 
   /** Converts to a StructField with some existing metadata. */
   def toStructField(existingMetadata: Metadata): StructField = {
-    StructField(name, new VectorUDT, nullable = false, toMetadata(existingMetadata))
+    StructField(name, SQLDataTypes.VectorType, nullable = false, toMetadata(existingMetadata))
   }
 
   /** Converts to a StructField. */
@@ -236,7 +236,7 @@ object AttributeGroup {
    * Creates an attribute group from a `StructField` instance.
    */
   def fromStructField(field: StructField): AttributeGroup = {
-    require(field.dataType == new VectorUDT)
+    require(field.dataType == SQLDataTypes.VectorType)
     if (field.metadata.contains(ML_ATTR)) {
       fromMetadata(field.metadata.getMetadata(ML_ATTR), field.name)
     } else {
