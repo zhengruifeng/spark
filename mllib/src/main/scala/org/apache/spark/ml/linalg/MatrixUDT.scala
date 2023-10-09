@@ -94,7 +94,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
 
   override def equals(o: Any): Boolean = {
     o match {
-      case v: MatrixUDT => true
+      case _: MatrixUDT => true
       case _ => false
     }
   }
@@ -108,3 +108,5 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
 
   private[spark] override def asNullable: MatrixUDT = this
 }
+
+private[ml] case object MatrixUDT extends MatrixUDT

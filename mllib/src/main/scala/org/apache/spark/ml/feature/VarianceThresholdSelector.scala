@@ -101,8 +101,8 @@ with DefaultParamsWritable {
 
   @Since("3.1.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
-    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(featuresCol), VectorUDT)
+    SchemaUtils.appendColumn(schema, $(outputCol), VectorUDT)
   }
 
   @Since("3.1.0")
@@ -148,7 +148,7 @@ class VarianceThresholdSelectorModel private[ml](
 
   @Since("3.1.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(featuresCol), VectorUDT)
     val newField =
       SelectorModel.prepOutputField(schema, selectedFeatures, $(outputCol), $(featuresCol), true)
     SchemaUtils.appendColumn(schema, newField)

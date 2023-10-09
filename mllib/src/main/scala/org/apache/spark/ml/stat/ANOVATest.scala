@@ -99,7 +99,7 @@ private[ml] object ANOVATest {
     val spark = dataset.sparkSession
     import spark.implicits._
 
-    SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
+    SchemaUtils.checkColumnType(dataset.schema, featuresCol, VectorUDT)
     SchemaUtils.checkNumericType(dataset.schema, labelCol)
 
     val points = dataset.select(col(labelCol).cast("double"), col(featuresCol))

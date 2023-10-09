@@ -262,9 +262,9 @@ final class UnivariateFeatureSelector @Since("3.1.1")(@Since("3.1.1") override v
       }
     }
     require(isSet(featureType) && isSet(labelType), "featureType and labelType need to be set")
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(featuresCol), VectorUDT)
     SchemaUtils.checkNumericType(schema, $(labelCol))
-    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(outputCol), VectorUDT)
   }
 
   @Since("3.1.1")
@@ -308,7 +308,7 @@ class UnivariateFeatureSelectorModel private[ml](
 
   @Since("3.1.1")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(featuresCol), VectorUDT)
     val newField =
       UnivariateFeatureSelectorModel
         .prepOutputField(schema, selectedFeatures, $(outputCol), $(featuresCol), isNumericAttribute)

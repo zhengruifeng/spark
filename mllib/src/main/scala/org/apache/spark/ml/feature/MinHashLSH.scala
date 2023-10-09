@@ -188,7 +188,7 @@ class MinHashLSH(override val uid: String) extends LSH[MinHashLSHModel] with Has
 
   @Since("2.1.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(inputCol), VectorUDT)
     validateAndTransformSchema(schema)
   }
 

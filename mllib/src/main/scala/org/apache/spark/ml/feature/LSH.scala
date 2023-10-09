@@ -53,7 +53,7 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
    * @return A derived schema with [[outputCol]] added.
    */
   protected[this] final def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.appendColumn(schema, $(outputCol), DataTypes.createArrayType(new VectorUDT))
+    SchemaUtils.appendColumn(schema, $(outputCol), DataTypes.createArrayType(VectorUDT))
   }
 }
 

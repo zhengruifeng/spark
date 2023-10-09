@@ -290,7 +290,7 @@ private[spark] object SummaryBuilderImpl extends Logging {
     StructType(fields)
   }
 
-  private val vectorUDT = new VectorUDT
+  private val vectorUDT = VectorUDT
 
   /**
    * All the metrics that can be currently computed by Spark for vectors.

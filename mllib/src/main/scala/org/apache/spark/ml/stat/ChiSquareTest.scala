@@ -72,7 +72,7 @@ object ChiSquareTest {
       featuresCol: String,
       labelCol: String,
       flatten: Boolean): DataFrame = {
-    SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
+    SchemaUtils.checkColumnType(dataset.schema, featuresCol, VectorUDT)
     SchemaUtils.checkNumericType(dataset.schema, labelCol)
 
     val spark = dataset.sparkSession

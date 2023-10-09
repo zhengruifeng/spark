@@ -36,7 +36,7 @@ private[ml] trait ProbabilisticClassifierParams
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
     val parentSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
-    SchemaUtils.appendColumn(parentSchema, $(probabilityCol), new VectorUDT)
+    SchemaUtils.appendColumn(parentSchema, $(probabilityCol), VectorUDT)
   }
 }
 

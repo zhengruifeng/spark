@@ -134,7 +134,7 @@ abstract class Predictor[
    *
    * The default value is VectorUDT, but it may be overridden if FeaturesType is not Vector.
    */
-  private[ml] def featuresDataType: DataType = new VectorUDT
+  private[ml] def featuresDataType: DataType = VectorUDT
 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, featuresDataType)
@@ -170,7 +170,7 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
    *
    * The default value is VectorUDT, but it may be overridden if FeaturesType is not Vector.
    */
-  protected def featuresDataType: DataType = new VectorUDT
+  protected def featuresDataType: DataType = VectorUDT
 
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema, fitting = false, featuresDataType)

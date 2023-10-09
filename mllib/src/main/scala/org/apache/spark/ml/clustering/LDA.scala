@@ -354,7 +354,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
       }
     }
     SchemaUtils.validateVectorCompatibleColumn(schema, getFeaturesCol)
-    SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(topicDistributionCol), VectorUDT)
   }
 
   private[clustering] def getOldOptimizer: OldLDAOptimizer =

@@ -115,7 +115,7 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("3.1.0")
   def getMetrics(dataset: Dataset[_]): BinaryClassificationMetrics = {
     val schema = dataset.schema
-    SchemaUtils.checkColumnTypes(schema, $(rawPredictionCol), Seq(DoubleType, new VectorUDT))
+    SchemaUtils.checkColumnTypes(schema, $(rawPredictionCol), Seq(DoubleType, VectorUDT))
     SchemaUtils.checkNumericType(schema, $(labelCol))
     if (isDefined(weightCol)) {
       SchemaUtils.checkNumericType(schema, $(weightCol))

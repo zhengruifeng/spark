@@ -154,7 +154,7 @@ class AttributeGroup private (
 
   /** Converts to a StructField with some existing metadata. */
   def toStructField(existingMetadata: Metadata): StructField = {
-    StructField(name, new VectorUDT, nullable = false, toMetadata(existingMetadata))
+    StructField(name, VectorUDT, nullable = false, toMetadata(existingMetadata))
   }
 
   /** Converts to a StructField. */
@@ -236,7 +236,7 @@ object AttributeGroup {
    * Creates an attribute group from a `StructField` instance.
    */
   def fromStructField(field: StructField): AttributeGroup = {
-    require(field.dataType == new VectorUDT)
+    require(field.dataType == VectorUDT)
     if (field.metadata.contains(ML_ATTR)) {
       fromMetadata(field.metadata.getMetadata(ML_ATTR), field.name)
     } else {

@@ -403,7 +403,7 @@ private[ml] trait TreeEnsembleClassifierParams
       featuresDataType: DataType): StructType = {
     var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     if ($(leafCol).nonEmpty) {
-      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), VectorUDT)
     }
     outputSchema
   }
@@ -421,7 +421,7 @@ private[ml] trait TreeEnsembleRegressorParams
       featuresDataType: DataType): StructType = {
     var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     if ($(leafCol).nonEmpty) {
-      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), VectorUDT)
     }
     outputSchema
   }

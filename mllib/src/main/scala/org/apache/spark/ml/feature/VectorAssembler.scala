@@ -170,7 +170,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     if (schema.fieldNames.contains(outputColName)) {
       throw new IllegalArgumentException(s"Output column $outputColName already exists.")
     }
-    StructType(schema.fields :+ new StructField(outputColName, new VectorUDT, true))
+    StructType(schema.fields :+ StructField(outputColName, VectorUDT, true))
   }
 
   @Since("1.4.1")

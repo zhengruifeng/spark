@@ -63,7 +63,7 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
     require(get(outputCol).isDefined, "Output col must be defined first.")
     require($(inputCols).length > 0, "Input cols must have non-zero length.")
     require($(inputCols).distinct.length == $(inputCols).length, "Input cols must be distinct.")
-    StructType(schema.fields :+ StructField($(outputCol), new VectorUDT, false))
+    StructType(schema.fields :+ StructField($(outputCol), VectorUDT, false))
   }
 
   @Since("2.0.0")

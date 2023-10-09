@@ -27,8 +27,8 @@ import org.apache.spark.sql.types.DataType
 object SQLDataTypes {
 
   /** Data type for [[Vector]]. */
-  val VectorType: DataType = new VectorUDT
+  val VectorType: DataType = VectorUDT
 
   /** Data type for [[Matrix]]. */
-  val MatrixType: DataType = new MatrixUDT
+  val MatrixType: DataType = MatrixUDT
 }

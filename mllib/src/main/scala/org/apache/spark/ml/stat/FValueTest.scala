@@ -98,7 +98,7 @@ private[ml] object FValueTest {
       dataset: Dataset[_],
       featuresCol: String,
       labelCol: String): RDD[(Int, Double, Long, Double)] = {
-    SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
+    SchemaUtils.checkColumnType(dataset.schema, featuresCol, VectorUDT)
     SchemaUtils.checkNumericType(dataset.schema, labelCol)
 
     val spark = dataset.sparkSession

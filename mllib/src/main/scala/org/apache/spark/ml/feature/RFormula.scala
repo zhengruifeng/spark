@@ -309,9 +309,9 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     require(!hasLabelCol(schema) || !$(forceIndexLabel),
       "If label column already exists, forceIndexLabel can not be set with true.")
     if (hasLabelCol(schema)) {
-      StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true))
+      StructType(schema.fields :+ StructField($(featuresCol), VectorUDT, true))
     } else {
-      StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true) :+
+      StructType(schema.fields :+ StructField($(featuresCol), VectorUDT, true) :+
         StructField($(labelCol), DoubleType, true))
     }
   }

@@ -46,7 +46,7 @@ private[spark] object MetadataUtils {
    * Returns None if the number of features is not specified.
    */
   def getNumFeatures(vectorSchema: StructField): Option[Int] = {
-    if (vectorSchema.dataType == new VectorUDT) {
+    if (vectorSchema.dataType == VectorUDT) {
       val group = AttributeGroup.fromStructField(vectorSchema)
       val size = group.size
       if (size >= 0) {

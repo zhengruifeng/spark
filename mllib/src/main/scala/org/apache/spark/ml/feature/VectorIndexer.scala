@@ -157,11 +157,10 @@ class VectorIndexer @Since("1.4.0") (
   override def transformSchema(schema: StructType): StructType = {
     // We do not transfer feature metadata since we do not know what types of features we will
     // produce in transform().
-    val dataType = new VectorUDT
     require(isDefined(inputCol), s"VectorIndexer requires input column parameter: $inputCol")
     require(isDefined(outputCol), s"VectorIndexer requires output column parameter: $outputCol")
-    SchemaUtils.checkColumnType(schema, $(inputCol), dataType)
-    SchemaUtils.appendColumn(schema, $(outputCol), dataType)
+    SchemaUtils.checkColumnType(schema, $(inputCol), VectorUDT)
+    SchemaUtils.appendColumn(schema, $(outputCol), VectorUDT)
   }
 
   @Since("1.4.1")
@@ -436,12 +435,11 @@ class VectorIndexerModel private[ml] (
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    val dataType = new VectorUDT
     require(isDefined(inputCol),
       s"VectorIndexerModel requires input column parameter: $inputCol")
     require(isDefined(outputCol),
       s"VectorIndexerModel requires output column parameter: $outputCol")
-    SchemaUtils.checkColumnType(schema, $(inputCol), dataType)
+    SchemaUtils.checkColumnType(schema, $(inputCol), VectorUDT)
 
     // If the input metadata specifies numFeatures, compare with expected numFeatures.
     val origAttrGroup = AttributeGroup.fromStructField(schema($(inputCol)))

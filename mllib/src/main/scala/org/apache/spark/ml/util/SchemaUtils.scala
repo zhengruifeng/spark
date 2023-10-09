@@ -199,7 +199,7 @@ private[spark] object SchemaUtils {
    * @param colName column name
    */
   def validateVectorCompatibleColumn(schema: StructType, colName: String): Unit = {
-    val typeCandidates = List( new VectorUDT,
+    val typeCandidates = List(VectorUDT,
       new ArrayType(DoubleType, false),
       new ArrayType(FloatType, false))
     checkColumnTypes(schema, colName, typeCandidates)

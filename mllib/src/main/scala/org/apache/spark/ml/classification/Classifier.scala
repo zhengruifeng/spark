@@ -38,7 +38,7 @@ private[spark] trait ClassifierParams
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
     val parentSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
-    SchemaUtils.appendColumn(parentSchema, $(rawPredictionCol), new VectorUDT)
+    SchemaUtils.appendColumn(parentSchema, $(rawPredictionCol), VectorUDT)
   }
 }
 

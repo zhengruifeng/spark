@@ -75,7 +75,7 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
 
   override def equals(o: Any): Boolean = {
     o match {
-      case v: VectorUDT => true
+      case _: VectorUDT => true
       case _ => false
     }
   }
@@ -99,3 +99,5 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
       StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))
   }
 }
+
+private[ml] case object VectorUDT extends VectorUDT
