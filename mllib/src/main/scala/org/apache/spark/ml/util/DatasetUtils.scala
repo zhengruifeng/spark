@@ -22,6 +22,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.classification.ClassifierParams
 import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.functions._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
@@ -140,19 +141,12 @@ private[spark] object DatasetUtils extends Logging {
     columnDataType match {
       case _: VectorUDT => col(colName)
       case fdt: ArrayType =>
-        val transferUDF = fdt.elementType match {
-          case _: FloatType => udf(f = (vector: Seq[Float]) => {
-            val inputArray = Array.ofDim[Double](vector.size)
-            vector.indices.foreach(idx => inputArray(idx) = vector(idx).toDouble)
-            Vectors.dense(inputArray)
-          })
-          case _: DoubleType => udf((vector: Seq[Double]) => {
-            Vectors.dense(vector.toArray)
-          })
+        fdt.elementType match {
+          case _: FloatType => array_to_vector(col(colName).cast("array<double>"))
+          case _: DoubleType => array_to_vector(col(colName))
           case other =>
             throw new IllegalArgumentException(s"Array[$other] column cannot be cast to Vector")
         }
-        transferUDF(col(colName))
       case other =>
         throw new IllegalArgumentException(s"$other column cannot be cast to Vector")
     }
