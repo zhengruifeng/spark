@@ -245,16 +245,18 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     }
 
     // quantile should be in the range [0.0, 1.0]
-    val e = intercept[IllegalArgumentException] {
+    val e = intercept[AnalysisException] {
       df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2, -0.1), epsilons.head)
     }
-    assert(e.getMessage.contains("percentile should be in the range [0.0, 1.0]"))
+    assert(e.getMessage.contains(
+      "data type mismatch: The percentage must be between [0.0, 1.0]"))
 
     // relativeError should be non-negative
-    val e2 = intercept[IllegalArgumentException] {
+    val e2 = intercept[AnalysisException] {
       df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), -1.0)
     }
-    assert(e2.getMessage.contains("Relative Error must be non-negative"))
+    assert(e2.getMessage.contains(
+      "data type mismatch: The accuracy must be between (0, 2147483647]"))
   }
 
   test("approximate quantile 2: test relativeError greater than 1 return the same result as 1") {
