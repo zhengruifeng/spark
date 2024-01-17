@@ -487,19 +487,21 @@ class DataFrame:
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
 
+        _schema = self.schema
         _cols: List[Column] = []
         for c in cols:
             if isinstance(c, Column):
                 _cols.append(c)
             elif isinstance(c, str):
-                _cols.append(self[c])
+                _cols.append(self._check_col_name(c, _schema))
             elif isinstance(c, int) and not isinstance(c, bool):
                 if c < 1:
                     raise PySparkIndexError(
                         error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
                     )
                 # ordinal is 1-based
-                _cols.append(self[c - 1])
+                _col_name = _schema.names[c - 1]
+                _cols.append(self._check_col_name(_col_name, _schema))
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
@@ -513,19 +515,21 @@ class DataFrame:
     groupby = groupBy
 
     def rollup(self, *cols: "ColumnOrName") -> "GroupedData":
+        _schema = self.schema
         _cols: List[Column] = []
         for c in cols:
             if isinstance(c, Column):
                 _cols.append(c)
             elif isinstance(c, str):
-                _cols.append(self[c])
+                _cols.append(self._check_col_name(c, _schema))
             elif isinstance(c, int) and not isinstance(c, bool):
                 if c < 1:
                     raise PySparkIndexError(
                         error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
                     )
                 # ordinal is 1-based
-                _cols.append(self[c - 1])
+                _col_name = _schema.names[c - 1]
+                _cols.append(self._check_col_name(_col_name, _schema))
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
@@ -537,19 +541,21 @@ class DataFrame:
     rollup.__doc__ = PySparkDataFrame.rollup.__doc__
 
     def cube(self, *cols: "ColumnOrName") -> "GroupedData":
+        _schema = self.schema
         _cols: List[Column] = []
         for c in cols:
             if isinstance(c, Column):
                 _cols.append(c)
             elif isinstance(c, str):
-                _cols.append(self[c])
+                _cols.append(self._check_col_name(c, _schema))
             elif isinstance(c, int) and not isinstance(c, bool):
                 if c < 1:
                     raise PySparkIndexError(
                         error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
                     )
                 # ordinal is 1-based
-                _cols.append(self[c - 1])
+                _col_name = _schema.names[c - 1]
+                _cols.append(self._check_col_name(_col_name, _schema))
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
@@ -563,6 +569,7 @@ class DataFrame:
     def groupingSets(
         self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
     ) -> "GroupedData":
+        _schema = self.schema
         gsets: List[List[Column]] = []
         for grouping_set in groupingSets:
             gset: List[Column] = []
@@ -570,7 +577,7 @@ class DataFrame:
                 if isinstance(c, Column):
                     gset.append(c)
                 elif isinstance(c, str):
-                    gset.append(self[c])
+                    gset.append(self._check_col_name(c, _schema))
                 else:
                     raise PySparkTypeError(
                         error_class="NOT_COLUMN_OR_STR",
@@ -586,7 +593,7 @@ class DataFrame:
             if isinstance(c, Column):
                 gcols.append(c)
             elif isinstance(c, str):
-                gcols.append(self[c])
+                gcols.append(self._check_col_name(c, _schema))
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
@@ -1686,6 +1693,19 @@ class DataFrame:
 
     sampleBy.__doc__ = PySparkDataFrame.sampleBy.__doc__
 
+    def _check_col_name(self, name: str, schema: StructType) -> "Column":
+        if name not in schema.names:
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
+            )
+
+        return Column(
+            ColumnReference(
+                unparsed_identifier=name,
+                plan_id=self._plan._plan_id,
+            )
+        )
+
     def __getattr__(self, name: str) -> "Column":
         if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd", "toJSON"]:
             raise PySparkAttributeError(
@@ -1700,17 +1720,8 @@ class DataFrame:
                 message_parameters={"feature": f"{name}()"},
             )
 
-        if name not in self.columns:
-            raise PySparkAttributeError(
-                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
-            )
+        return self._check_col_name(name, self.schema)
 
-        return Column(
-            ColumnReference(
-                unparsed_identifier=name,
-                plan_id=self._plan._plan_id,
-            )
-        )
 
     __getattr__.__doc__ = PySparkDataFrame.__getattr__.__doc__
 
@@ -1732,23 +1743,7 @@ class DataFrame:
                     )
                 )
             else:
-                # TODO: revisit vanilla Spark's Dataset.col
-                # if (sparkSession.sessionState.conf.supportQuotedRegexColumnName) {
-                #   colRegex(colName)
-                # } else {
-                #   Column(addDataFrameIdToCol(resolve(colName)))
-                # }
-
-                # validate the column name
-                if not hasattr(self._session, "is_mock_session"):
-                    self.select(item).isLocal()
-
-                return Column(
-                    ColumnReference(
-                        unparsed_identifier=item,
-                        plan_id=self._plan._plan_id,
-                    )
-                )
+                return self._check_col_name(item, self.schema)
         elif isinstance(item, Column):
             return self.filter(item)
         elif isinstance(item, (list, tuple)):
