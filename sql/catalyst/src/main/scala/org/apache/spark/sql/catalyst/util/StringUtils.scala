@@ -116,16 +116,31 @@ object StringUtils extends Logging {
    * @return the filtered names list in order
    */
   def filterPattern(names: Seq[String], pattern: String): Seq[String] = {
-    val funcNames = scala.collection.mutable.SortedSet.empty[String]
-    pattern.trim().split("\\|").foreach { subPattern =>
+    filterPattern[String](names, pattern)(identity).distinct.sorted
+  }
+
+  /**
+   * This utility can be used for filtering pattern in the "Like" of "Show Tables / Functions" DDL
+   *
+   * @param instances the object list to be filtered
+   * @param pattern   the filter pattern, only '*' and '|' are allowed as wildcards, others will
+   *                  follow regular expression convention, case insensitive match and white spaces
+   *                  on both ends will be ignored
+   * @return the filtered objects in the original order
+   */
+  def filterPattern[T](instances: Seq[T], pattern: String)(name: T => String): Seq[T] = {
+    val regexes = pattern.trim().split("\\|").flatMap { subPattern =>
       try {
         val regex = ("(?i)" + subPattern.replaceAll("\\*", ".*")).r
-        funcNames ++= names.filter{ name => regex.pattern.matcher(name).matches() }
+        Some(regex)
       } catch {
-        case _: PatternSyntaxException =>
+        case _: PatternSyntaxException => None
       }
     }
-    funcNames.toSeq
+    instances.filter { instance =>
+      val instanceName = name(instance)
+      regexes.exists(_.pattern.matcher(instanceName).matches())
+    }
   }
 
   /**
