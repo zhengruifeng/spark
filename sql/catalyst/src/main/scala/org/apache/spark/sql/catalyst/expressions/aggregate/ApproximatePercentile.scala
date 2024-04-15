@@ -83,7 +83,72 @@ import org.apache.spark.util.ArrayImplicits._
 case class ApproximatePercentile(
     child: Expression,
     percentageExpression: Expression,
-    accuracyExpression: Expression,
+    accuracyExpression: Expression)
+  extends AggregateFunction with RuntimeReplaceableAggregate with ImplicitCastInputTypes
+  with TernaryLike[Expression] {
+
+  def this(child: Expression, percentageExpression: Expression) = {
+    this(child, percentageExpression, Literal(ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY))
+  }
+
+  // Mark as lazy so that accuracyExpression is not evaluated during tree transformation.
+  private lazy val accuracyNum = accuracyExpression.eval().asInstanceOf[Number]
+  private lazy val accuracy: Long = accuracyNum.longValue
+
+  override def replacement: Expression =
+    ApproximatePercentileWithRelativeError(
+      child = child,
+      percentageExpression = percentageExpression,
+      relativeErrorExpression = Literal(1.0 / accuracy, DoubleType),
+      mutableAggBufferOffset = 0,
+      inputAggBufferOffset = 0)
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
+    // are all numeric, and can be easily cast to double for processing.
+    Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
+      YearMonthIntervalType, DayTimeIntervalType),
+      TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)), IntegralType)
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else if (accuracyNum == null) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "accuracy"))
+    } else if (accuracy <= 0 || accuracy > Int.MaxValue) {
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "accuracy",
+          "valueRange" -> s"(0, ${Int.MaxValue}]",
+          "currentValue" -> toSQLValue(accuracy, LongType)
+        )
+      )
+    } else {
+      TypeCheckSuccess
+    }
+  }
+
+  override def first: Expression = child
+  override def second: Expression = percentageExpression
+  override def third: Expression = accuracyExpression
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("percentile_approx")
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): ApproximatePercentile =
+    copy(child = newFirst, percentageExpression = newSecond, accuracyExpression = newThird)
+}
+
+case class ApproximatePercentileWithRelativeError(
+    child: Expression,
+    percentageExpression: Expression,
+    relativeErrorExpression: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
   extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes
@@ -97,9 +162,9 @@ case class ApproximatePercentile(
     this(child, percentageExpression, Literal(ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY))
   }
 
-  // Mark as lazy so that accuracyExpression is not evaluated during tree transformation.
-  private lazy val accuracyNum = accuracyExpression.eval().asInstanceOf[Number]
-  private lazy val accuracy: Long = accuracyNum.longValue
+  // Mark as lazy so that relativeErrorExpression is not evaluated during tree transformation.
+  private lazy val relativeErrorNumber = relativeErrorExpression.eval().asInstanceOf[Number]
+  private lazy val relativeErrorValue: Double = relativeErrorNumber.longValue
 
   override def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
@@ -131,26 +196,26 @@ case class ApproximatePercentile(
           "inputExpr" -> toSQLExpr(percentageExpression)
         )
       )
-    } else if (!accuracyExpression.foldable) {
+    } else if (!relativeErrorExpression.foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("accuracy"),
-          "inputType" -> toSQLType(accuracyExpression.dataType),
-          "inputExpr" -> toSQLExpr(accuracyExpression)
+          "inputType" -> toSQLType(relativeErrorExpression.dataType),
+          "inputExpr" -> toSQLExpr(relativeErrorExpression)
         )
       )
-    } else if (accuracyNum == null) {
+    } else if (relativeErrorNumber == null) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
-        messageParameters = Map("exprName" -> "accuracy"))
-    } else if (accuracy <= 0 || accuracy > Int.MaxValue) {
+        messageParameters = Map("exprName" -> "relativeError"))
+    } else if (relativeErrorValue < 0) {
       DataTypeMismatch(
         errorSubClass = "VALUE_OUT_OF_RANGE",
         messageParameters = Map(
           "exprName" -> "accuracy",
-          "valueRange" -> s"(0, ${Int.MaxValue}]",
-          "currentValue" -> toSQLValue(accuracy, LongType)
+          "valueRange" -> s"[0, ${Double.MaxValue}]",
+          "currentValue" -> toSQLValue(relativeErrorValue, DoubleType)
         )
       )
     } else if (percentages == null) {
@@ -172,8 +237,7 @@ case class ApproximatePercentile(
   }
 
   override def createAggregationBuffer(): PercentileDigest = {
-    val relativeError = 1.0D / accuracy
-    new PercentileDigest(relativeError)
+    new PercentileDigest(relativeErrorValue)
   }
 
   override def update(buffer: PercentileDigest, inputRow: InternalRow): PercentileDigest = {
@@ -225,15 +289,16 @@ case class ApproximatePercentile(
     }
   }
 
-  override def withNewMutableAggBufferOffset(newOffset: Int): ApproximatePercentile =
+  override def withNewMutableAggBufferOffset(
+      newOffset: Int): ApproximatePercentileWithRelativeError =
     copy(mutableAggBufferOffset = newOffset)
 
-  override def withNewInputAggBufferOffset(newOffset: Int): ApproximatePercentile =
+  override def withNewInputAggBufferOffset(newOffset: Int): ApproximatePercentileWithRelativeError =
     copy(inputAggBufferOffset = newOffset)
 
   override def first: Expression = child
   override def second: Expression = percentageExpression
-  override def third: Expression = accuracyExpression
+  override def third: Expression = relativeErrorExpression
 
   // Returns null for empty inputs
   override def nullable: Boolean = true
@@ -246,7 +311,7 @@ case class ApproximatePercentile(
   override def dataType: DataType = internalDataType
 
   override def prettyName: String =
-    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("percentile_approx")
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("percentile_approx_with_relative_error")
 
   override def serialize(obj: PercentileDigest): Array[Byte] = {
     ApproximatePercentile.serializer.serialize(obj)
@@ -257,9 +322,12 @@ case class ApproximatePercentile(
   }
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): ApproximatePercentile =
-    copy(child = newFirst, percentageExpression = newSecond, accuracyExpression = newThird)
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): ApproximatePercentileWithRelativeError =
+    copy(child = newFirst, percentageExpression = newSecond, relativeErrorExpression = newThird)
 }
+
 
 object ApproximatePercentile {
 
