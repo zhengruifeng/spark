@@ -154,13 +154,15 @@ case class ApproximatePercentileWithRelativeError(
   extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes
   with TernaryLike[Expression] {
 
-  def this(child: Expression, percentageExpression: Expression, accuracyExpression: Expression) = {
-    this(child, percentageExpression, accuracyExpression, 0, 0)
+  def this(
+      child: Expression,
+      percentageExpression: Expression,
+      relativeErrorExpression: Expression) = {
+    this(child, percentageExpression, relativeErrorExpression, 0, 0)
   }
 
-  def this(child: Expression, percentageExpression: Expression) = {
-    this(child, percentageExpression, Literal(ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY))
-  }
+  def this(child: Expression, percentageExpression: Expression) =
+    this(child, percentageExpression, Literal(ApproximatePercentile.DEFAULT_RELATIVE_ERROR))
 
   // Mark as lazy so that relativeErrorExpression is not evaluated during tree transformation.
   private lazy val relativeErrorNumber = relativeErrorExpression.eval().asInstanceOf[Number]
@@ -334,6 +336,8 @@ object ApproximatePercentile {
   // Default accuracy of Percentile approximation. Larger value means better accuracy.
   // The default relative error can be deduced by defaultError = 1.0 / DEFAULT_PERCENTILE_ACCURACY
   val DEFAULT_PERCENTILE_ACCURACY: Int = 10000
+
+  val DEFAULT_RELATIVE_ERROR: Double = 1.0 / DEFAULT_PERCENTILE_ACCURACY
 
   /**
    * PercentileDigest is a probabilistic data structure used for approximating percentiles

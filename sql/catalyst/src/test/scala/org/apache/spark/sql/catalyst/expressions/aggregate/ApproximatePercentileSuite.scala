@@ -104,8 +104,9 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     val expectedPercentiles = percentages.map(count * _)
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = false), DoubleType)
     val percentageExpression = CreateArray(percentages.toSeq.map(Literal(_)))
-    val accuracyExpression = Literal(10000)
-    val agg = new ApproximatePercentile(childExpression, percentageExpression, accuracyExpression)
+    val relativeErrorExpression = Literal(1.0 / 10000)
+    val agg = new ApproximatePercentileWithRelativeError(
+      childExpression, percentageExpression, relativeErrorExpression)
 
     assert(agg.nullable)
     val group1 = (0 until data.length / 2)
@@ -142,7 +143,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     val percentage = 0.5D
 
     // Phase one, partial mode aggregation
-    val agg = new ApproximatePercentile(childExpression, Literal(percentage))
+    val agg = new ApproximatePercentileWithRelativeError(childExpression, Literal(percentage))
       .withNewInputAggBufferOffset(inputAggregationBufferOffset)
       .withNewMutableAggBufferOffset(mutableAggregationBufferOffset)
 
@@ -411,7 +412,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
 
   test("class ApproximatePercentile, null handling") {
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = true), DoubleType)
-    val agg = new ApproximatePercentile(childExpression, Literal(0.5D))
+    val agg = new ApproximatePercentileWithRelativeError(childExpression, Literal(0.5D))
     val buffer = new GenericInternalRow(new Array[Any](1))
     agg.initialize(buffer)
     // Empty aggregation buffer
