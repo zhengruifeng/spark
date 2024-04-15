@@ -164,7 +164,7 @@ case class ApproximatePercentileWithRelativeError(
 
   // Mark as lazy so that relativeErrorExpression is not evaluated during tree transformation.
   private lazy val relativeErrorNumber = relativeErrorExpression.eval().asInstanceOf[Number]
-  private lazy val relativeErrorValue: Double = relativeErrorNumber.longValue
+  private lazy val relativeErrorValue: Double = relativeErrorNumber.doubleValue()
 
   override def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
