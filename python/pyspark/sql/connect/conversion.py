@@ -89,6 +89,7 @@ class LocalDataToArrowConversion:
             return True
         elif isinstance(dataType, DecimalType):
             # Convert Decimal('NaN') to None
+            # Also need to rescale non-NaN values
             return True
         elif isinstance(dataType, StringType):
             # Coercion to StringType is allowed
@@ -248,6 +249,16 @@ class LocalDataToArrowConversion:
             return convert_timestamp_ntz
 
         elif isinstance(dataType, DecimalType):
+            # In Spark Classic, the decimal values are rescaled in
+            # the JVM side (python.EvaluatePython.makeFromJava -> BigDecimal.setScale).
+            # But in Spark Connect, we need to truncate the values here;
+            # otherwise, the Arrow conversion may fail with this error
+            # 'ArrowInvalid: Rescaling Decimal128 value would cause data loss'
+            ctx = decimal.Context(
+                prec=dataType.precision,
+                rounding=decimal.ROUND_HALF_UP,
+            )
+            scale = dataType.scale
 
             def convert_decimal(value: Any) -> Any:
                 if value is None:
@@ -256,7 +267,7 @@ class LocalDataToArrowConversion:
                     return None
                 else:
                     assert isinstance(value, decimal.Decimal)
-                    return None if value.is_nan() else value
+                    return None if value.is_nan() else round(value, scale).normalize(ctx)
 
             return convert_decimal
 
