@@ -192,6 +192,12 @@ private[sql] object PythonSQLUtils extends Logging {
   def pandasCovar(col1: Column, col2: Column, ddof: Int): Column = {
     Column(PandasCovar(col1.expr, col2.expr, ddof).toAggregateExpression(false))
   }
+
+  /**
+   * A long column that increases one by one.
+   * This is for 'distributed-sequence' default index in pandas API on Spark.
+   */
+  def distributed_sequence_id(): Column = Column(DistributedSequenceID())
 }
 
 /**
