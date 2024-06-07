@@ -251,7 +251,7 @@ class LocalDataToArrowConversion:
         elif isinstance(dataType, DecimalType):
             # In Spark Classic, the decimal values are rescaled in
             # the JVM side (python.EvaluatePython.makeFromJava -> BigDecimal.setScale).
-            # But in Spark Connect, we need to truncate the values here;
+            # But in Spark Connect, we need to rescale the values here;
             # otherwise, the Arrow conversion may fail with this error
             # 'ArrowInvalid: Rescaling Decimal128 value would cause data loss'
             ctx = decimal.Context(
@@ -267,7 +267,7 @@ class LocalDataToArrowConversion:
                     return None
                 else:
                     assert isinstance(value, decimal.Decimal)
-                    return None if value.is_nan() else round(value, scale).normalize(ctx)
+                    return None if value.is_nan() else value.normalize(ctx)
 
             return convert_decimal
 
