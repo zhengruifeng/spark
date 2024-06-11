@@ -27,13 +27,15 @@ from typing import (
     Any,
     Union,
     Optional,
+    Callable,
 )
 
 from pyspark.sql.column import Column as ParentColumn
 from pyspark.errors import PySparkTypeError, PySparkAttributeError, PySparkValueError
-from pyspark.sql.types import DataType
+from pyspark.sql.types import DataType, StringType
 
 import pyspark.sql.connect.proto as proto
+from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.connect.expressions import (
     Expression,
     UnresolvedFunction,
@@ -51,6 +53,7 @@ from pyspark.errors.utils import with_origin_to_class
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
+        ColumnOrName,
         LiteralType,
         DateTimeLiteral,
         DecimalLiteral,
@@ -349,7 +352,7 @@ class Column(ParentColumn):
         return _bin_op("ilike", self, other)
 
     def substr(
-        self, startPos: Union[int, ParentColumn], length: Union[int, ParentColumn]
+        self, startPos: Union[int, ParentColumn], length: Union[int, ParentColumn] = 10000
     ) -> ParentColumn:
         if type(startPos) != type(length):
             raise PySparkTypeError(
@@ -560,6 +563,112 @@ class Column(ParentColumn):
         )
 
     __bool__ = __nonzero__
+
+    @staticmethod
+    def lit(value: Any) -> ParentColumn:
+        return F.lit(value)
+
+    @staticmethod
+    def pi() -> ParentColumn:
+        return F.pi()
+
+    @staticmethod
+    def col(col: str) -> ParentColumn:
+        return F.col(col)
+
+    @staticmethod
+    def uuid() -> ParentColumn:
+        return F._invoke_function("uuid")
+
+    @staticmethod
+    def expr(str: str) -> ParentColumn:
+        return F.expr(str)
+
+    @staticmethod
+    def rank() -> ParentColumn:
+        return F.rank()
+
+    @staticmethod
+    def row_number() -> ParentColumn:
+        return F.row_number()
+
+    @staticmethod
+    def concat(*cols: "ColumnOrName") -> ParentColumn:
+        return F.concat(*cols)
+
+    def bitwise_not(self) -> ParentColumn:
+        return F.bitwise_not(self)
+
+    def getbit(self, pos: "ColumnOrName") -> ParentColumn:
+        return F.getbit(self, pos)
+
+    def get(self, index: Union["ColumnOrName", int]) -> ParentColumn:
+        return F.get(self, index)
+
+    def split(
+        self,
+        pattern: Union["Column", str],
+        limit: Union["ColumnOrName", int] = -1,
+    ) -> ParentColumn:
+        return F.split(self, pattern, limit)
+
+    def split_part(
+        self,
+        delimiter: Union["Column", str],
+        partNum: Union["ColumnOrName", int],
+    ) -> ParentColumn:
+        partNum = F.lit(partNum) if isinstance(partNum, int) else partNum
+        return F.split_part(self, F.lit(delimiter), partNum)
+
+    def lower(self) -> ParentColumn:
+        return F.lower(self)
+
+    def sum(self) -> ParentColumn:
+        return F.sum(self)
+
+    def try_sum(self) -> ParentColumn:
+        return F.try_sum(self)
+
+    def array_append(self, value: Any) -> ParentColumn:
+        return F.array_append(self, value)
+
+    def array_remove(self, value: Any) -> ParentColumn:
+        return F.array_remove(self, value)
+
+    def regexp_replace(
+        self,
+        pattern: Union[str, "Column"],
+        replacement: Union[str, "Column"],
+    ) -> ParentColumn:
+        return F.regexp_replace(self, pattern, replacement)
+
+    def array_sort(
+        self,
+        comparator: Optional[Callable[["Column", "Column"], "Column"]] = None,
+    ) -> ParentColumn:
+        return F.array_sort(self, comparator)
+
+    def reduce(
+        self,
+        initialValue: "ColumnOrName",
+        merge: Callable[["Column", "Column"], "Column"],
+        finish: Optional[Callable[["Column"], "Column"]] = None,
+    ) -> ParentColumn:
+        return F.reduce(self, initialValue, merge, finish)
+
+    def filter(
+        self,
+        f: Union[Callable[["Column"], "Column"], Callable[["Column", "Column"], "Column"]],
+    ) -> ParentColumn:
+        return F.filter(self, f)
+
+    def map_elements(
+        self,
+        f: Callable[..., Any],
+        returnType: "DataTypeOrString" = StringType(),
+    ) -> ParentColumn:
+        udf = F.udf(f, returnType)
+        return udf(self)
 
 
 def _test() -> None:

@@ -23,15 +23,17 @@ from typing import (
     Any,
     TYPE_CHECKING,
     Union,
+    Callable,
+    Optional,
 )
 
-from pyspark.sql.utils import dispatch_col_method
-from pyspark.sql.types import DataType
+from pyspark.sql.utils import dispatch_col_method, dispatch_col_static_method
+from pyspark.sql.types import DataType, StringType
 from pyspark.errors import PySparkValueError
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
-    from pyspark.sql._typing import LiteralType, DecimalLiteral, DateTimeLiteral
+    from pyspark.sql._typing import ColumnOrName, LiteralType, DecimalLiteral, DateTimeLiteral
     from pyspark.sql.window import WindowSpec
 
 __all__ = ["Column"]
@@ -1531,6 +1533,132 @@ class Column:
 
     @dispatch_col_method
     def __repr__(self) -> str:
+        ...
+
+    @dispatch_col_static_method
+    @staticmethod
+    def lit(value: Any) -> "Column":
+        ...
+
+    @dispatch_col_static_method
+    @staticmethod
+    def col(col: str) -> "Column":
+        ...
+
+    @dispatch_col_static_method
+    @staticmethod
+    def pi() -> "Column":
+        ...
+
+    @dispatch_col_static_method
+    @staticmethod
+    def uuid() -> "Column":
+        ...
+
+    @dispatch_col_static_method
+    @staticmethod
+    def expr(str: str) -> "Column":
+        ...
+
+    @dispatch_col_static_method
+    @staticmethod
+    def rank() -> "Column":
+        ...
+
+    @dispatch_col_static_method
+    @staticmethod
+    def row_number() -> "Column":
+        ...
+
+    @dispatch_col_static_method
+    @staticmethod
+    def concat(*cols: "ColumnOrName") -> "Column":
+        ...
+
+    @dispatch_col_method
+    def bitwise_not(self) -> "Column":
+        ...
+
+    @dispatch_col_method
+    def getbit(self, pos: "ColumnOrName") -> "Column":
+        ...
+
+    @dispatch_col_method
+    def get(self, index: Union["ColumnOrName", int]) -> "Column":
+        ...
+
+    @dispatch_col_method
+    def split(
+        self,
+        pattern: Union["Column", str],
+        limit: Union["ColumnOrName", int] = -1,
+    ) -> "Column":
+        ...
+
+    @dispatch_col_method
+    def split_part(
+        self,
+        delimiter: Union["Column", str],
+        partNum: Union["ColumnOrName", int],
+    ) -> "Column":
+        ...
+
+    @dispatch_col_method
+    def lower(self) -> "Column":
+        ...
+
+    @dispatch_col_method
+    def sum(self) -> "Column":
+        ...
+
+    @dispatch_col_method
+    def try_sum(self) -> "Column":
+        ...
+
+    @dispatch_col_method
+    def array_append(self, value: Any) -> "Column":
+        ...
+
+    @dispatch_col_method
+    def array_remove(self, value: Any) -> "Column":
+        ...
+
+    @dispatch_col_method
+    def regexp_replace(
+        self,
+        pattern: Union[str, "Column"],
+        replacement: Union[str, "Column"],
+    ) -> "Column":
+        ...
+
+    @dispatch_col_method
+    def array_sort(
+        self, comparator: Optional[Callable[["Column", "Column"], "Column"]] = None
+    ) -> "Column":
+        ...
+
+    @dispatch_col_method
+    def reduce(
+        self,
+        initialValue: "ColumnOrName",
+        merge: Callable[["Column", "Column"], "Column"],
+        finish: Optional[Callable[["Column"], "Column"]] = None,
+    ) -> "Column":
+        ...
+
+    @dispatch_col_method
+    def filter(
+        self,
+        f: Union[Callable[["Column"], "Column"], Callable[["Column", "Column"], "Column"]],
+    ) -> "Column":
+        ...
+
+    @dispatch_col_method
+    def map_elements(
+        self,
+        f: Callable[..., Any],
+        returnType: "DataTypeOrString" = StringType(),
+    ) -> "Column":
         ...
 
 

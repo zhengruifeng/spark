@@ -355,6 +355,31 @@ def dispatch_df_method(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
+def dispatch_col_static_method(f: FuncT) -> FuncT:
+    """
+    For the usecases of direct Column.method(...), it checks if the
+    Connect mode is on, and dispatches.
+    """
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            return getattr(ConnectColumn, f.__name__)(*args, **kwargs)
+        else:
+            from pyspark.sql.classic.column import Column as ClassicColumn
+
+            return getattr(ClassicColumn, f.__name__)(*args, **kwargs)
+
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": f"Column.{f.__name__}"},
+        )
+
+    return cast(FuncT, wrapped)
+
+
 def dispatch_col_method(f: FuncT) -> FuncT:
     """
     For the usecases of direct Column.method(col, ...), it checks if self
