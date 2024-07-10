@@ -10416,7 +10416,7 @@ def unbase64(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def ltrim(col: "ColumnOrName", trim: Union[Column, str] = None) -> Column:
+def ltrim(col: "ColumnOrName", trim: Optional[Union[Column, str]] = None) -> Column:
     """
     Trim the spaces from left end for the specified string value.
 
@@ -10476,7 +10476,7 @@ def ltrim(col: "ColumnOrName", trim: Union[Column, str] = None) -> Column:
 
 
 @_try_remote_functions
-def rtrim(col: "ColumnOrName", trim: Union[Column, str] = None) -> Column:
+def rtrim(col: "ColumnOrName", trim: Optional[Union[Column, str]] = None) -> Column:
     """
     Trim the spaces from right end for the specified string value.
 
@@ -10536,7 +10536,7 @@ def rtrim(col: "ColumnOrName", trim: Union[Column, str] = None) -> Column:
 
 
 @_try_remote_functions
-def trim(col: "ColumnOrName", trim: Union[Column, str] = None) -> Column:
+def trim(col: "ColumnOrName", trim: Optional[Union[Column, str]] = None) -> Column:
     """
     Trim the spaces from both ends for the specified string column.
 
