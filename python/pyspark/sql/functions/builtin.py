@@ -10416,7 +10416,7 @@ def unbase64(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def ltrim(col: "ColumnOrName") -> Column:
+def ltrim(col: "ColumnOrName", trim: Union[Column, str] = None) -> Column:
     """
     Trim the spaces from left end for the specified string value.
 
@@ -10429,6 +10429,10 @@ def ltrim(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
+    trim : :class:`~pyspark.sql.Column` or str
+        the trim string characters to trim. If not specified, it trims the spaces.
+
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -10437,21 +10441,42 @@ def ltrim(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Trim the spaces
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
-    >>> df.select(ltrim("value").alias("r")).withColumn("length", length("r")).show()
-    +-------+------+
-    |      r|length|
-    +-------+------+
-    |  Spark|     5|
-    |Spark  |     7|
-    |  Spark|     5|
-    +-------+------+
+    >>> trimmed = sf.ltrim("value")
+    >>> df.select(trimmed, sf.length(trimmed)).show()
+    +------------+--------------------+
+    |ltrim(value)|length(ltrim(value))|
+    +------------+--------------------+
+    |       Spark|                   5|
+    |     Spark  |                   7|
+    |       Spark|                   5|
+    +------------+--------------------+
+
+    Example 2: Trim specified characters
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
+    >>> trimmed = sf.ltrim("value", "S ")
+    >>> df.select(trimmed, sf.length(trimmed)).show()
+    +---------------------------+-----------------------------------+
+    |TRIM(LEADING S  FROM value)|length(TRIM(LEADING S  FROM value))|
+    +---------------------------+-----------------------------------+
+    |                       park|                                  4|
+    |                     park  |                                  6|
+    |                       park|                                  4|
+    +---------------------------+-----------------------------------+
     """
-    return _invoke_function_over_columns("ltrim", col)
+    if trim is not None:
+        return _invoke_function_over_columns("ltrim", col, lit(trim))
+    else:
+        return _invoke_function_over_columns("ltrim", col)
 
 
 @_try_remote_functions
-def rtrim(col: "ColumnOrName") -> Column:
+def rtrim(col: "ColumnOrName", trim: Union[Column, str] = None) -> Column:
     """
     Trim the spaces from right end for the specified string value.
 
@@ -10464,6 +10489,10 @@ def rtrim(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
+    trim : :class:`~pyspark.sql.Column` or str
+        the trim string characters to trim. If not specified, it trims the spaces.
+
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -10472,21 +10501,42 @@ def rtrim(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Trim the spaces
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
-    >>> df.select(rtrim("value").alias("r")).withColumn("length", length("r")).show()
-    +--------+------+
-    |       r|length|
-    +--------+------+
-    |   Spark|     8|
-    |   Spark|     5|
-    |   Spark|     6|
-    +--------+------+
+    >>> trimmed = sf.rtrim("value")
+    >>> df.select(trimmed, sf.length(trimmed)).show()
+    +------------+--------------------+
+    |rtrim(value)|length(rtrim(value))|
+    +------------+--------------------+
+    |       Spark|                   8|
+    |       Spark|                   5|
+    |       Spark|                   6|
+    +------------+--------------------+
+
+    Example 2: Trim specified characters
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
+    >>> trimmed = sf.rtrim("value", "k ")
+    >>> df.select(trimmed, sf.length(trimmed)).show()
+    +----------------------------+------------------------------------+
+    |TRIM(TRAILING k  FROM value)|length(TRIM(TRAILING k  FROM value))|
+    +----------------------------+------------------------------------+
+    |                        Spar|                                   7|
+    |                        Spar|                                   4|
+    |                        Spar|                                   5|
+    +----------------------------+------------------------------------+
     """
-    return _invoke_function_over_columns("rtrim", col)
+    if trim is not None:
+        return _invoke_function_over_columns("rtrim", col, lit(trim))
+    else:
+        return _invoke_function_over_columns("rtrim", col)
 
 
 @_try_remote_functions
-def trim(col: "ColumnOrName") -> Column:
+def trim(col: "ColumnOrName", trim: Union[Column, str] = None) -> Column:
     """
     Trim the spaces from both ends for the specified string column.
 
@@ -10499,6 +10549,10 @@ def trim(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
+    trim : :class:`~pyspark.sql.Column` or str
+        the trim string characters to trim. If not specified, it trims the spaces.
+
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -10507,17 +10561,38 @@ def trim(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Trim the spaces
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
-    >>> df.select(trim("value").alias("r")).withColumn("length", length("r")).show()
-    +-----+------+
-    |    r|length|
-    +-----+------+
-    |Spark|     5|
-    |Spark|     5|
-    |Spark|     5|
-    +-----+------+
+    >>> trimmed = sf.trim("value")
+    >>> df.select(trimmed, sf.length(trimmed)).show()
+    +-----------+-------------------+
+    |trim(value)|length(trim(value))|
+    +-----------+-------------------+
+    |      Spark|                  5|
+    |      Spark|                  5|
+    |      Spark|                  5|
+    +-----------+-------------------+
+
+    Example 2: Trim specified characters
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
+    >>> trimmed = sf.trim("value", "S k")
+    >>> df.select(trimmed, sf.length(trimmed)).show()
+    +-------------------------+---------------------------------+
+    |TRIM(BOTH S k FROM value)|length(TRIM(BOTH S k FROM value))|
+    +-------------------------+---------------------------------+
+    |                      par|                                3|
+    |                      par|                                3|
+    |                      par|                                3|
+    +-------------------------+---------------------------------+
     """
-    return _invoke_function_over_columns("trim", col)
+    if trim is not None:
+        return _invoke_function_over_columns("trim", col, lit(trim))
+    else:
+        return _invoke_function_over_columns("trim", col)
 
 
 @_try_remote_functions

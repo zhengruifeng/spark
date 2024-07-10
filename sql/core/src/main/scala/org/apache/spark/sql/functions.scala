@@ -3947,6 +3947,13 @@ object functions {
   def ltrim(e: Column, trimString: String): Column = Column.fn("ltrim", lit(trimString), e)
 
   /**
+   * Trim the specified character string from left end for the specified string column.
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def ltrim(e: Column, trimString: Column): Column = Column.fn("ltrim", trimString, e)
+
+  /**
    * Calculates the byte length for the specified string column.
    *
    * @group string_funcs
@@ -4144,6 +4151,13 @@ object functions {
   def rtrim(e: Column, trimString: String): Column = Column.fn("rtrim", lit(trimString), e)
 
   /**
+   * Trim the specified character string from right end for the specified string column.
+   * @group string_funcs
+   * @since 2.3.0
+   */
+  def rtrim(e: Column, trimString: Column): Column = Column.fn("rtrim", trimString, e)
+
+  /**
    * Returns the soundex code for the specified expression.
    *
    * @group string_funcs
@@ -4320,6 +4334,13 @@ object functions {
    * @since 2.3.0
    */
   def trim(e: Column, trimString: String): Column = Column.fn("trim", lit(trimString), e)
+
+  /**
+   * Trim the specified character from both ends for the specified string column.
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def trim(e: Column, trimString: Column): Column = Column.fn("trim", trimString, e)
 
   /**
    * Converts a string column to upper case.
