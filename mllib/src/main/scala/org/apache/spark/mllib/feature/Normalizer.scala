@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.feature
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors}
 
 /**
  * Normalizes samples individually to unit L^p^ norm
@@ -55,21 +55,11 @@ class Normalizer @Since("1.1.0") (p: Double) extends VectorTransformer {
       vector match {
         case DenseVector(vs) =>
           val values = vs.clone()
-          val size = values.length
-          var i = 0
-          while (i < size) {
-            values(i) /= norm
-            i += 1
-          }
+          BLAS.javaBLAS.dscal(values.length, 1.0 / norm, values, 1)
           Vectors.dense(values)
         case SparseVector(size, ids, vs) =>
           val values = vs.clone()
-          val nnz = values.length
-          var i = 0
-          while (i < nnz) {
-            values(i) /= norm
-            i += 1
-          }
+          BLAS.javaBLAS.dscal(values.length, 1.0 / norm, values, 1)
           Vectors.sparse(size, ids, values)
         case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
       }
