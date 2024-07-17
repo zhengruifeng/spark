@@ -19,18 +19,18 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.expressions.UserDefinedFunction
-import org.apache.spark.sql.functions.{col, lit, udf}
-import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.sql.{Column, DataFrame, Dataset}
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.functions.{get => fget, printf => fprintf, _}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
 /** Private trait for params and common methods for OneHotEncoder and OneHotEncoderModel */
@@ -252,40 +252,41 @@ class OneHotEncoderModel private[ml] (
     }
   }
 
-  private def encoder: UserDefinedFunction = {
+  private def encode(label: Column, colIdx: Column): Column = {
     val keepInvalid = getHandleInvalid == OneHotEncoder.KEEP_INVALID
-    val configedSizes = getConfigedCategorySizes
-    val localCategorySizes = categorySizes
 
-    // The udf performed on input data. The first parameter is the input value. The second
-    // parameter is the index in inputCols of the column being encoded.
-    udf { (label: Double, colIdx: Int) =>
-      val origCategorySize = localCategorySizes(colIdx)
-      // idx: index in vector of the single 1-valued element
-      val idx = if (label >= 0 && label < origCategorySize) {
-        label
-      } else {
-        if (keepInvalid) {
-          origCategorySize
-        } else {
-          if (label < 0) {
-            throw new SparkException(s"Negative value: $label. Input can't be negative. " +
-              s"To handle invalid values, set Param handleInvalid to " +
-              s"${OneHotEncoder.KEEP_INVALID}")
-          } else {
-            throw new SparkException(s"Unseen value: $label. To handle unseen values, " +
-              s"set Param handleInvalid to ${OneHotEncoder.KEEP_INVALID}.")
-          }
-        }
-      }
+    val origCategorySize = fget(lit(categorySizes), colIdx)
 
-      val size = configedSizes(colIdx)
-      if (idx < size) {
-        Vectors.sparse(size, Array(idx.toInt), Array(1.0))
-      } else {
-        Vectors.sparse(size, Array.emptyIntArray, Array.emptyDoubleArray)
-      }
-    }
+    val errorMsg1 = "Negative value: %s. Input can't be negative. " +
+      "To handle invalid values, set Param handleInvalid to " +
+      s"${OneHotEncoder.KEEP_INVALID}"
+    val errorMsg2 = "Unseen value: %s. To handle unseen values, " +
+      s"set Param handleInvalid to ${OneHotEncoder.KEEP_INVALID}."
+
+    val idx = when(lit(0) <= label && label <= origCategorySize, label)
+      .when(lit(keepInvalid), origCategorySize)
+      .when(label < lit(0), raise_error(fprintf(lit(errorMsg1), label.cast(StringType))))
+      .otherwise(raise_error(fprintf(lit(errorMsg2), label.cast(StringType))))
+
+    val typeCol = lit(0.toByte)
+    val sizeCol = fget(lit(getConfigedCategorySizes), colIdx)
+    val indicesCol = when(idx < sizeCol,
+      array_compact(array(idx.cast(IntegerType))))
+      .otherwise(new Column(Literal(
+        new GenericArrayData(Array.emptyIntArray), ArrayType(IntegerType, false))))
+    val values = when(idx < sizeCol, new Column(Literal(
+      new GenericArrayData(Array(1.0)), ArrayType(DoubleType, false))))
+      .otherwise(new Column(Literal(
+        new GenericArrayData(Array.emptyDoubleArray), ArrayType(DoubleType, false))))
+
+    val encoded = struct(
+      typeCol.as("type"),
+      sizeCol.as("size"),
+      indicesCol.as("indices"),
+      values.as("values"))
+
+    val vecUDT = new VectorUDT()
+    wrap_udt(encoded.cast(vecUDT.sqlType), vecUDT)
   }
 
   /** @group setParam */
@@ -371,7 +372,7 @@ class OneHotEncoderModel private[ml] (
         outputAttrGroupFromSchema.toMetadata()
       }
 
-      encoder(col(inputColName).cast(DoubleType), lit(idx))
+      encode(col(inputColName).cast(DoubleType), lit(idx))
         .as(outputColName, metadata)
     }
     dataset.withColumns(outputColNames.toImmutableArraySeq, encodedColumns)

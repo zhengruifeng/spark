@@ -8487,6 +8487,10 @@ object functions {
     UnwrapUDT(column.expr)
   }
 
+  private[spark] def wrap_udt(column: Column, udt: UserDefinedType[_]): Column = withExpr {
+    WrapUDT(column.expr, udt)
+  }
+
   // scalastyle:off
   // TODO(SPARK-45970): Use @static annotation so Java can access to those
   //   API in the same way. Once we land this fix, should deprecate
