@@ -145,6 +145,8 @@ object Cast extends QueryErrorsBase {
               resolvableNullability(fromField.nullable, toField.nullable)
         }
 
+    case (struct: StructType, udt: UserDefinedType[_]) => canAnsiCast(struct, udt.sqlType)
+
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
 
     case _ => false
@@ -172,6 +174,8 @@ object Cast extends QueryErrorsBase {
                 fromField.nullable || forceNullable(fromField.dataType, toField.dataType),
                 toField.nullable)
         }
+
+    case (struct: StructType, udt: UserDefinedType[_]) => canTryCast(struct, udt.sqlType)
 
     case _ =>
       Cast.canAnsiCast(from, to)
@@ -258,6 +262,8 @@ object Cast extends QueryErrorsBase {
                 fromField.nullable || forceNullable(fromField.dataType, toField.dataType),
                 toField.nullable)
         }
+
+    case (struct: StructType, udt: UserDefinedType[_]) => canCast(struct, udt.sqlType)
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
 
@@ -1142,8 +1148,7 @@ case class Cast(
         case struct: StructType => castStruct(from.asInstanceOf[StructType], struct)
         case udt: UserDefinedType[_] if udt.acceptsType(from) =>
           identity[Any]
-        case _: UserDefinedType[_] =>
-          throw QueryExecutionErrors.cannotCastError(from, to)
+        case udt: UserDefinedType[_] => castInternal(from, udt.sqlType)
       }
     }
   }
@@ -1251,8 +1256,8 @@ case class Cast(
     case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
     case udt: UserDefinedType[_] if udt.acceptsType(from) =>
       (c, evPrim, evNull) => code"$evPrim = $c;"
-    case _: UserDefinedType[_] =>
-      throw QueryExecutionErrors.cannotCastError(from, to)
+    case udt: UserDefinedType[_] =>
+      nullSafeCastFunction(from, udt.sqlType, ctx)
   }
 
   // Since we need to cast input expressions recursively inside ComplexTypes, such as Map's
