@@ -28,7 +28,6 @@ import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInput
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.expressions.{KnownNotNull, Literal}
-import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.functions.{printf => fprintf, _}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -267,18 +266,18 @@ class OneHotEncoderModel private[ml] (
       .when(lit(keepInvalid), lit(origCategorySize))
       .when(label < lit(0), raise_error(fprintf(lit(errorMsg1), label.cast(StringType))))
       .otherwise(raise_error(fprintf(lit(errorMsg2), label.cast(StringType))))
-    // make array(idx) containsNull=false, so that it can be casted to VectorUDT
+    // make array(idx) containsNull=false, required in following 'cast(new VectorUDT())'
     val idx = new Column(KnownNotNull(rawIdx.expr))
+
+    val intArrayType = ArrayType(IntegerType, false)
+    val doubleArrayType = ArrayType(DoubleType, false)
 
     val typeCol = lit(0.toByte)
     val sizeCol = lit(size)
     val indicesCol = when(idx < sizeCol, array(idx))
-      .otherwise(new Column(Literal(
-        new GenericArrayData(Array.emptyIntArray), ArrayType(IntegerType, false))))
-    val values = when(idx < sizeCol, new Column(Literal(
-      new GenericArrayData(Array(1.0)), ArrayType(DoubleType, false))))
-      .otherwise(new Column(Literal(
-        new GenericArrayData(Array.emptyDoubleArray), ArrayType(DoubleType, false))))
+      .otherwise(new Column(Literal.create(Array.emptyIntArray, intArrayType)))
+    val values = when(idx < sizeCol, new Column(Literal.create(Array(1.0), doubleArrayType)))
+      .otherwise(new Column(Literal.create(Array.emptyDoubleArray, doubleArrayType)))
 
     struct(
       typeCol.as("type"),
