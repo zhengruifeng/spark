@@ -145,9 +145,9 @@ object Cast extends QueryErrorsBase {
               resolvableNullability(fromField.nullable, toField.nullable)
         }
 
-    case (struct: StructType, udt: UserDefinedType[_]) => canAnsiCast(struct, udt.sqlType)
-
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
+
+    case (_, udt: UserDefinedType[_]) => canAnsiCast(from, udt.sqlType)
 
     case _ => false
   }
@@ -175,7 +175,9 @@ object Cast extends QueryErrorsBase {
                 toField.nullable)
         }
 
-    case (struct: StructType, udt: UserDefinedType[_]) => canTryCast(struct, udt.sqlType)
+    case (_, udt: UserDefinedType[_]) if !from.isInstanceOf[UserDefinedType[_]] =>
+      // this is likely a struct -> struct cast
+      canTryCast(from, udt.sqlType)
 
     case _ =>
       Cast.canAnsiCast(from, to)
@@ -263,9 +265,9 @@ object Cast extends QueryErrorsBase {
                 toField.nullable)
         }
 
-    case (struct: StructType, udt: UserDefinedType[_]) => canCast(struct, udt.sqlType)
-
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
+
+    case (_, udt: UserDefinedType[_]) => canCast(from, udt.sqlType)
 
     case _ => false
   }
