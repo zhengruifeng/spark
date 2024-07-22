@@ -1597,6 +1597,11 @@ case class ArrayPrepend(left: Expression, right: Expression) extends ArrayPendBa
 
   override def prettyName: String = "array_prepend"
 
+  override def dataType: ArrayType = {
+    val arr = left.dataType.asInstanceOf[ArrayType]
+    arr.copy(containsNull = arr.containsNull || right.nullable)
+  }
+
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ArrayPrepend =
     copy(left = newLeft, right = newRight)
@@ -1631,6 +1636,11 @@ case class ArrayAppend(left: Expression, right: Expression) extends ArrayPendBas
   override lazy val replacement: Expression = new ArrayInsert(left, Literal(-1), right)
 
   override def prettyName: String = "array_append"
+
+  override def dataType: ArrayType = {
+    val arr = left.dataType.asInstanceOf[ArrayType]
+    arr.copy(containsNull = arr.containsNull || right.nullable)
+  }
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ArrayAppend =
