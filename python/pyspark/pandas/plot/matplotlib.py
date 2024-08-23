@@ -535,12 +535,14 @@ class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
     def _compute_plot_data(self):
         self.data = KdePlotBase.prepare_kde_data(self.data)
 
-    def _make_plot_keywords(self, kwds, y):
+    def _make_plot_keywords(self, kwds, ind):
         kwds["bw_method"] = self.bw_method
-        kwds["ind"] = type(self)._get_ind(y, ind=self.ind)
+        kwds["ind"] = ind
         return kwds
 
     def _make_plot(self, fig: Figure):
+        from pyspark.sql import functions as F
+
         # 'num_colors' requires to calculate `shape` which has to count all.
         # Use 1 for now to save the computation.
         colors = self._get_colors(num_colors=1)
@@ -548,9 +550,31 @@ class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
 
         sdf = self.data._internal.spark_frame
 
+        min_max_val_cols = []
         for i, label in enumerate(self.data._internal.column_labels):
-            # 'y' is a Spark DataFrame that selects one column.
-            y = sdf.select(self.data._internal.spark_column_for(label))
+            input_col = self.data._internal.spark_column_for(label)
+            min_max_val_cols.append(
+                F.array(F.min(input_col), F.max(input_col)).alias(f"min_max_{i}")
+            )
+        min_max_vals = sdf.select(*min_max_val_cols).first()
+
+        kde_cols = []
+        inds = []
+        for i, label in enumerate(self.data._internal.column_labels):
+            min_val, max_val = min_max_vals[i][0], min_max_vals[i][1]
+            ind = KdePlotBase.compute_ind(self.ind, min_val, max_val)
+            inds.append(ind)
+            kde_cols.append(
+                KdePlotBase.compute_kde_col(
+                    input_col=self.data._internal.spark_column_for(label),
+                    ind=ind,
+                    bw_method=self.bw_method,
+                ).alias(f"kde_{i}")
+            )
+        kde_results = sdf.select(*kde_cols).first()
+
+        for i, label in enumerate(self.data._internal.column_labels):
+            y = kde_results[i]
             ax = self._get_ax(i)
 
             kwds = self.kwds.copy()
@@ -569,7 +593,8 @@ class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
             if style is not None:
                 kwds["style"] = style
 
-            kwds = self._make_plot_keywords(kwds, y)
+            ind = inds[i]
+            kwds = self._make_plot_keywords(kwds, ind)
             artists = self._plot(ax, y, column_num=i, stacking_id=stacking_id, **kwds)
             # `if hasattr(...)` makes plotting compatible with pandas < 1.3,
             # see pandas-dev/pandas#40078.
@@ -577,15 +602,10 @@ class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
                 self, "_append_legend_handles_labels"
             ) else self._add_legend_handle(artists[0], label, index=i)
 
-    @staticmethod
-    def _get_ind(y, ind):
-        return KdePlotBase.get_ind(y, ind)
-
     @classmethod
     def _plot(
         cls, ax, y, style=None, bw_method=None, ind=None, column_num=None, stacking_id=None, **kwds
     ):
-        y = KdePlotBase.compute_kde(y, bw_method=bw_method, ind=ind)
         lines = PandasMPLPlot._plot(ax, ind, y, style=style, **kwds)
         return lines
 

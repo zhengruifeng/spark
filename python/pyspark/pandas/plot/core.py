@@ -452,6 +452,24 @@ class KdePlotBase(NumericPlotBase):
         return numeric_data
 
     @staticmethod
+    def compute_ind(ind, min_val, max_val):
+        if ind is None:
+            sample_range = max_val - min_val
+            ind = np.linspace(
+                min_val - 0.5 * sample_range,
+                max_val + 0.5 * sample_range,
+                1000,
+            )
+        elif is_integer(ind):
+            sample_range = max_val - min_val
+            ind = np.linspace(
+                min_val - 0.5 * sample_range,
+                max_val + 0.5 * sample_range,
+                ind,
+            )
+        return ind
+
+    @staticmethod
     def get_ind(sdf, ind):
         def calc_min_max():
             if len(sdf.columns) > 1:
@@ -464,20 +482,10 @@ class KdePlotBase(NumericPlotBase):
 
         if ind is None:
             min_val, max_val = calc_min_max()
-            sample_range = max_val - min_val
-            ind = np.linspace(
-                min_val - 0.5 * sample_range,
-                max_val + 0.5 * sample_range,
-                1000,
-            )
+            ind = KdePlotBase.compute_ind(ind, min_val, max_val)
         elif is_integer(ind):
             min_val, max_val = calc_min_max()
-            sample_range = max_val - min_val
-            ind = np.linspace(
-                min_val - 0.5 * sample_range,
-                max_val + 0.5 * sample_range,
-                ind,
-            )
+            ind = KdePlotBase.compute_ind(ind, min_val, max_val)
         return ind
 
     @staticmethod
