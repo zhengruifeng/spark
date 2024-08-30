@@ -965,8 +965,9 @@ class InternalFrame:
                 )
                 .join(sdf_res)
                 .select(
-                    F.col(column_name)
-                    + F.element_at(F.col("res"), F.col("pid")).alias(column_name),
+                    (F.col(column_name) + F.element_at(F.col("res"), F.col("pid"))).alias(
+                        column_name
+                    ),
                     *columns,
                 )
             )
