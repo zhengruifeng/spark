@@ -938,19 +938,38 @@ class InternalFrame:
         +--------+---+
         """
         if len(sdf.columns) > 0:
-            if is_remote():
-                from pyspark.sql.connect.column import Column as ConnectColumn
-                from pyspark.sql.connect.expressions import DistributedSequenceID
+            columns = sdf.columns
+            sdf_res = (
+                sdf.select(F.spark_partition_id().alias("pid"))
+                .groupby("pid")
+                .agg(F.count(F.lit(1)).alias("cnt"))
+                .select(
+                    F.col("pid"),
+                    F.zeroifnull(
+                        F.sum("cnt").over(
+                            Window.orderBy("pid").rowsBetween(
+                                Window.unboundedPreceding, Window.currentRow - 1
+                            )
+                        )
+                    ).alias("acc"),
+                )
+                .select(F.map_from_entries(F.collect_list(F.struct("pid", "acc"))).alias("res"))
+                .hint("broadcast")
+            )
 
-                return sdf.select(
-                    ConnectColumn(DistributedSequenceID()).alias(column_name),
-                    "*",
+            return (
+                sdf.select(
+                    F.monotonically_increasing_id().alias(column_name),
+                    F.spark_partition_id().alias("pid"),
+                    *columns,
                 )
-            else:
-                return PySparkDataFrame(
-                    sdf._jdf.toDF().withSequenceColumn(column_name),
-                    sdf.sparkSession,
+                .join(sdf_res)
+                .select(
+                    F.col(column_name)
+                    + F.element_at(F.col("res"), F.col("pid")).alias(column_name),
+                    *columns,
                 )
+            )
         else:
             cnt = sdf.count()
             if cnt > 0:
