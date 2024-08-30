@@ -173,6 +173,9 @@ private[sql] object PythonSQLUtils extends Logging {
   def pandasCovar(col1: Column, col2: Column, ddof: Int): Column =
     Column.internalFn("pandas_covar", col1, col2, lit(ddof))
 
+  def within_partition_increasing_id(): Column =
+    Column.internalFn("within_partition_increasing_id")
+
   def unresolvedNamedLambdaVariable(name: String): Column =
     Column(internal.UnresolvedNamedLambdaVariable.apply(name))
 

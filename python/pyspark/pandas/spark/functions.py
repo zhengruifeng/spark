@@ -187,6 +187,19 @@ def collect_top_k(col: Column, num: int, reverse: bool) -> Column:
         return Column(sc._jvm.PythonSQLUtils.collect_top_k(col._jc, num, reverse))
 
 
+def within_partition_increasing_id() -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
+
+        return _invoke_function_over_columns("within_partition_increasing_id")
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.within_partition_increasing_id())
+
+
 def make_interval(unit: str, e: Union[Column, int, float]) -> Column:
     unit_mapping = {
         "YEAR": "years",
