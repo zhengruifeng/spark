@@ -764,11 +764,11 @@ class InternalFrame:
                     _drop_metadata(index_field.struct_field) == _drop_metadata(struct_field)
                     for index_field, struct_field in zip(index_fields, struct_fields)
                 ), (index_fields, struct_fields)
-            # else:
-            #     assert all(
-            #         index_field.struct_field == struct_field
-            #         for index_field, struct_field in zip(index_fields, struct_fields)
-            #     ), (index_fields, struct_fields)
+            else:
+                assert all(
+                    index_field.struct_field == struct_field
+                    for index_field, struct_field in zip(index_fields, struct_fields)
+                ), (index_fields, struct_fields)
 
         self._index_fields: List[InternalField] = index_fields
 
@@ -965,9 +965,15 @@ class InternalFrame:
                 )
                 .join(sdf_res)
                 .select(
-                    (F.col(column_name) + F.element_at(F.col("res"), F.col("pid"))).alias(
-                        column_name
-                    ),
+                    (
+                        F.col(column_name)
+                        + F.zeroifnull(
+                            F.element_at(
+                                F.col("res"),
+                                F.col("pid"),
+                            )
+                        )
+                    ).alias(column_name),
                     *columns,
                 )
             )
