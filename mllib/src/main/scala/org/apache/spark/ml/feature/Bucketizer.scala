@@ -166,7 +166,8 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     val newCols = inputColumns.zipWithIndex.map { case (inputCol, idx) =>
       val splits = seqOfSplits(idx)
       val feature = filteredDataset(inputCol).cast(DoubleType)
-      Bucketizer.binarySearchForBuckets(splits, feature, keepInvalid).as(outputColumns(idx))
+      Bucketizer.binarySearchForBuckets(splits, feature, keepInvalid)
+        .cast(DoubleType).as(outputColumns(idx))
     }
     val metadata = outputColumns.map { col =>
       transformedSchema(col).metadata
@@ -304,8 +305,8 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
     val unboundErrMsg = printf(lit("Feature value %s out of Bucketizer bounds" +
       s" [${splits.head}, ${splits.last}]. Check your features, or loosen " +
       s"the lower/upper bound constraints."), feature)
-    val idx = binary_search(lit(splits), feature)
 
+    val idx = binary_search(lit(splits), feature)
     when(feature.isNaN, if (keepInvalid) lit(numSplits - 1) else raise_error(nanErrMsg))
       .when(!feature.between(splits.head, splits.last), raise_error(unboundErrMsg))
       .when(feature === lit(splits.last), lit(numSplits - 2))
