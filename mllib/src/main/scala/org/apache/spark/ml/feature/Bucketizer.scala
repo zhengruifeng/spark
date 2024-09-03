@@ -17,9 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import java.{util => ju}
-
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.attribute.NominalAttribute
@@ -27,7 +24,6 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
-import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -164,15 +160,11 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
       Seq($(splits))
     }
 
-    val bucketizers: Seq[UserDefinedFunction] = seqOfSplits.zipWithIndex.map { case (splits, idx) =>
-      udf { (feature: Double) =>
-        Bucketizer.binarySearchForBuckets(splits, feature, keepInvalid)
-      }.withName(s"bucketizer_$idx")
-    }
-
-
     val newCols = inputColumns.zipWithIndex.map { case (inputCol, idx) =>
-      bucketizers(idx)(filteredDataset(inputCol).cast(DoubleType))
+      val splits = seqOfSplits(idx)
+      val feature = filteredDataset(inputCol).cast(DoubleType)
+      Bucketizer.binarySearchForBuckets(splits, feature, keepInvalid)
+        .cast(DoubleType).as(outputColumns(idx))
     }
     val metadata = outputColumns.map { col =>
       transformedSchema(col).metadata
@@ -267,37 +259,25 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
    *                    Set "true" to make an extra bucket for NaN values;
    *                    Set "false" to report an error for NaN values
    * @return bucket for each data point
-   * @throws SparkException if a feature is < splits.head or > splits.last
+   * @throws SparkRuntimeException if a feature is < splits.head or > splits.last
    */
-
   private[feature] def binarySearchForBuckets(
       splits: Array[Double],
-      feature: Double,
-      keepInvalid: Boolean): Double = {
-    if (feature.isNaN) {
-      if (keepInvalid) {
-        splits.length - 1
-      } else {
-        throw new SparkException("Bucketizer encountered NaN value. To handle or skip NaNs," +
-          " try setting Bucketizer.handleInvalid.")
-      }
-    } else if (feature == splits.last) {
-      splits.length - 2
-    } else {
-      val idx = ju.Arrays.binarySearch(splits, feature)
-      if (idx >= 0) {
-        idx
-      } else {
-        val insertPos = -idx - 1
-        if (insertPos == 0 || insertPos == splits.length) {
-          throw new SparkException(s"Feature value $feature out of Bucketizer bounds" +
-            s" [${splits.head}, ${splits.last}]. Check your features, or loosen " +
-            s"the lower/upper bound constraints.")
-        } else {
-          insertPos - 1
-        }
-      }
-    }
+      feature: Column,
+      keepInvalid: Boolean): Column = {
+    val nanErrMsg = lit("Bucketizer encountered NaN value. " +
+      "To handle or skip NaNs, try setting Bucketizer.handleInvalid.")
+    val unboundErrMsg = printf(lit("Feature value %s out of Bucketizer bounds " +
+      s"[${splits.head}, ${splits.last}]. Check your features, or loosen " +
+      s"the lower/upper bound constraints."), feature)
+
+    val idx = Column.internalFn("array_binary_search", lit(splits), feature)
+    val bucket = when(idx >= 0, idx).otherwise(-idx - 2)
+
+    when(feature === lit(splits.last), lit(splits.length - 2))
+      .when(feature.between(splits.head, splits.last), bucket)
+      .when(feature.isNaN, if (keepInvalid) lit(splits.length - 1) else raise_error(nanErrMsg))
+      .otherwise(raise_error(unboundErrMsg))
   }
 
   @Since("1.6.0")
