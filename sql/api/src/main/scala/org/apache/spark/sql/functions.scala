@@ -386,6 +386,9 @@ object functions {
   private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
     Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
 
+  private[spark] def binary_search(e: Column, value: Column): Column =
+    Column.internalFn("array_binary_search", e, value)
+
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
    *

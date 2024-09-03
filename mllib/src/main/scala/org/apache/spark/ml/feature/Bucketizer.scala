@@ -27,7 +27,6 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
-import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -164,15 +163,10 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
       Seq($(splits))
     }
 
-    val bucketizers: Seq[UserDefinedFunction] = seqOfSplits.zipWithIndex.map { case (splits, idx) =>
-      udf { (feature: Double) =>
-        Bucketizer.binarySearchForBuckets(splits, feature, keepInvalid)
-      }.withName(s"bucketizer_$idx")
-    }
-
-
     val newCols = inputColumns.zipWithIndex.map { case (inputCol, idx) =>
-      bucketizers(idx)(filteredDataset(inputCol).cast(DoubleType))
+      val splits = seqOfSplits(idx)
+      val feature = filteredDataset(inputCol).cast(DoubleType)
+      Bucketizer.binarySearchForBuckets(splits, feature, keepInvalid).as(outputColumns(idx))
     }
     val metadata = outputColumns.map { col =>
       transformedSchema(col).metadata
@@ -298,6 +292,23 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
         }
       }
     }
+  }
+
+  private def binarySearchForBuckets(
+      splits: Array[Double],
+      feature: Column,
+      keepInvalid: Boolean): Column = {
+    val nanErrMsg = lit("Bucketizer encountered NaN value. " +
+      "To handle or skip NaNs, try setting Bucketizer.handleInvalid.")
+    val boundErrMsg = lit("Feature value %s out of Bucketizer bounds" +
+      s" [${splits.head}, ${splits.last}]. Check your features, or loosen " +
+      s"the lower/upper bound constraints.")
+    val idx = binary_search(lit(splits), feature)
+    when(!feature.between(splits.head, splits.last), raise_error(printf(boundErrMsg, feature)))
+      .when(feature.isNaN, if (keepInvalid) lit(splits.length - 1) else raise_error(nanErrMsg))
+      .when(feature === lit(splits.last), lit(splits.length - 2))
+      .when(idx >= 0, idx)
+      .otherwise(-idx - 2)
   }
 
   @Since("1.6.0")
