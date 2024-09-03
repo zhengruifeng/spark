@@ -19,13 +19,13 @@ package org.apache.spark.ml.feature
 
 import scala.util.Random
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -60,13 +60,13 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
     val invalidData2 = Array(0.51) ++ validData
     val badDF1 = invalidData1.zipWithIndex.toSeq.toDF("feature", "idx")
     withClue("Invalid feature value -0.9 was not caught as an invalid feature!") {
-      intercept[SparkException] {
+      intercept[SparkRuntimeException] {
         bucketizer.transform(badDF1).collect()
       }
     }
     val badDF2 = invalidData2.zipWithIndex.toSeq.toDF("feature", "idx")
     withClue("Invalid feature value 0.51 was not caught as an invalid feature!") {
-      intercept[SparkException] {
+      intercept[SparkRuntimeException] {
         bucketizer.transform(badDF2).collect()
       }
     }
@@ -116,7 +116,7 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
 
     bucketizer.setHandleInvalid("error")
     withClue("Bucketizer should throw error when setHandleInvalid=error and given NaN values") {
-      intercept[SparkException] {
+      intercept[SparkRuntimeException] {
         bucketizer.transform(dataFrame).collect()
       }
     }
@@ -143,17 +143,17 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
   test("Binary search correctness on hand-picked examples") {
     import BucketizerSuite.checkBinarySearch
     // length 3, with -inf
-    checkBinarySearch(Array(Double.NegativeInfinity, 0.0, 1.0))
+    checkBinarySearch(Array(Double.NegativeInfinity, 0.0, 1.0), spark)
     // length 4
-    checkBinarySearch(Array(-1.0, -0.5, 0.0, 1.0))
+    checkBinarySearch(Array(-1.0, -0.5, 0.0, 1.0), spark)
     // length 5
-    checkBinarySearch(Array(-1.0, -0.5, 0.0, 1.0, 1.5))
+    checkBinarySearch(Array(-1.0, -0.5, 0.0, 1.0, 1.5), spark)
     // length 3, with inf
-    checkBinarySearch(Array(0.0, 1.0, Double.PositiveInfinity))
+    checkBinarySearch(Array(0.0, 1.0, Double.PositiveInfinity), spark)
     // length 3, with -inf and inf
-    checkBinarySearch(Array(Double.NegativeInfinity, 1.0, Double.PositiveInfinity))
+    checkBinarySearch(Array(Double.NegativeInfinity, 1.0, Double.PositiveInfinity), spark)
     // length 4, with -inf and inf
-    checkBinarySearch(Array(Double.NegativeInfinity, 0.0, 1.0, Double.PositiveInfinity))
+    checkBinarySearch(Array(Double.NegativeInfinity, 0.0, 1.0, Double.PositiveInfinity), spark)
   }
 
   test("Binary search correctness in contrast with linear search, on random data") {
@@ -161,7 +161,7 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
     val splits: Array[Double] = Double.NegativeInfinity +:
       Array.fill(10)(Random.nextDouble()).sorted :+ Double.PositiveInfinity
     val bsResult = Vectors.dense(data.map(x =>
-      Bucketizer.binarySearchForBuckets(splits, x, false)))
+      BucketizerSuite.binarySearchForBuckets(splits, x, false)))
     val lsResult = Vectors.dense(data.map(x => BucketizerSuite.linearSearchForBuckets(splits, x)))
     assert(bsResult ~== lsResult absTol 1e-5)
   }
@@ -234,13 +234,13 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
       .setSplitsArray(Array(splits(0)))
 
     withClue("Invalid feature value -0.9 was not caught as an invalid feature!") {
-      intercept[SparkException] {
+      intercept[SparkRuntimeException] {
         bucketizer2.transform(badDF1).collect()
       }
     }
     val badDF2 = invalidData2.zipWithIndex.toSeq.toDF("feature", "idx")
     withClue("Invalid feature value 0.51 was not caught as an invalid feature!") {
-      intercept[SparkException] {
+      intercept[SparkRuntimeException] {
         bucketizer2.transform(badDF2).collect()
       }
     }
@@ -309,7 +309,7 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
 
     bucketizer.setHandleInvalid("error")
     withClue("Bucketizer should throw error when setHandleInvalid=error and given NaN values") {
-      intercept[SparkException] {
+      intercept[SparkRuntimeException] {
         bucketizer.transform(dataFrame).collect()
       }
     }
@@ -463,22 +463,66 @@ private object BucketizerSuite extends SparkFunSuite {
       s"linearSearchForBuckets failed to find bucket for feature value $feature")
   }
 
+  def binarySearchForBuckets(
+      splits: Array[Double],
+      feature: Double,
+      keepInvalid: Boolean): Double = {
+    if (feature.isNaN) {
+      if (keepInvalid) {
+        splits.length - 1
+      } else {
+        throw new SparkRuntimeException("Bucketizer encountered NaN value. " +
+          "To handle or skip NaNs, try setting Bucketizer.handleInvalid.", Map.empty)
+      }
+    } else if (feature == splits.last) {
+      splits.length - 2
+    } else {
+      val idx = java.util.Arrays.binarySearch(splits, feature)
+      if (idx >= 0) {
+        idx
+      } else {
+        val insertPos = -idx - 1
+        if (insertPos == 0 || insertPos == splits.length) {
+          throw new SparkRuntimeException(s"Feature value $feature out of Bucketizer bounds" +
+            s" [${splits.head}, ${splits.last}]. Check your features, or loosen " +
+            s"the lower/upper bound constraints.", Map.empty)
+        } else {
+          insertPos - 1
+        }
+      }
+    }
+  }
+
   /** Check all values in splits, plus values between all splits. */
-  def checkBinarySearch(splits: Array[Double]): Unit = {
-    def testFeature(feature: Double, expectedBucket: Double): Unit = {
-      assert(Bucketizer.binarySearchForBuckets(splits, feature, false) === expectedBucket,
-        s"Expected feature value $feature to be in bucket $expectedBucket with splits:" +
-          s" ${splits.mkString(", ")}")
-    }
-    var i = 0
+  def checkBinarySearch(splits: Array[Double], spark: SparkSession): Unit = {
+    import spark.implicits._
+
     val n = splits.length - 1
-    while (i < n) {
+    val featureAndBucket = Seq.range(0, n).flatMap { i =>
       // Split i should fall in bucket i.
-      testFeature(splits(i), i)
-      // Value between splits i,i+1 should be in i, which is also true if the (i+1)-th split is inf.
-      testFeature((splits(i) + splits(i + 1)) / 2, i)
-      i += 1
+      (splits(i), i) ::
+        // Value between splits i,i+1 should be in i, which is
+        // also true if the (i+1)-th split is inf.
+        ((splits(i) + splits(i + 1)) / 2, i) :: Nil
     }
+
+    featureAndBucket.foreach {
+      case (feature, expectedBucket) =>
+        assert(binarySearchForBuckets(splits, feature, false) === expectedBucket,
+          s"Expected feature value $feature to be in bucket $expectedBucket with splits:" +
+            s" ${splits.mkString(", ")}")
+    }
+
+    // test Bucketizer.binarySearchForBuckets
+    val df = featureAndBucket.toDF("feature", "expectedBucket")
+    val bucketCol = Bucketizer.binarySearchForBuckets(splits, col("feature"), false)
+    df.select(col("feature"), bucketCol.cast("double"), col("expectedBucket").cast("double"))
+      .collect().foreach {
+        case Row(feature: Double, bucket: Double, expectedBucket: Double) =>
+          assert(bucket === expectedBucket,
+            s"Expected feature value $feature to be in bucket $expectedBucket with splits:" +
+              s" ${splits.mkString(", ")}")
+      }
   }
 
   /** Checks if bucketized results match expected ones. */
