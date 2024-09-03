@@ -301,13 +301,13 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
     val numSplits = splits.length
     val nanErrMsg = lit("Bucketizer encountered NaN value. " +
       "To handle or skip NaNs, try setting Bucketizer.handleInvalid.")
-    val boundErrMsg = lit("Feature value %s out of Bucketizer bounds" +
+    val unboundErrMsg = printf(lit("Feature value %s out of Bucketizer bounds" +
       s" [${splits.head}, ${splits.last}]. Check your features, or loosen " +
-      s"the lower/upper bound constraints.")
+      s"the lower/upper bound constraints."), feature)
     val idx = binary_search(lit(splits), feature)
 
     when(feature.isNaN, if (keepInvalid) lit(numSplits - 1) else raise_error(nanErrMsg))
-      .when(!feature.between(splits.head, splits.last), raise_error(printf(boundErrMsg, feature)))
+      .when(!feature.between(splits.head, splits.last), raise_error(unboundErrMsg))
       .when(feature === lit(splits.last), lit(numSplits - 2))
       .when(idx >= 0, idx)
       .otherwise(-idx - 2)
