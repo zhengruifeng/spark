@@ -214,7 +214,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
 
         # cache should now be invalidated and results should be different
         df3 = self.df.withColumn("preds", identity(struct("a"))).toPandas()
-        self.assertFalse(df1.equals(df3))
+        self.assertFalse(df1.equals(df3), f"df1\n{df1}\n\ndf3\n{df3}")
 
     def test_transform_scalar(self):
         columns = self.df.columns
