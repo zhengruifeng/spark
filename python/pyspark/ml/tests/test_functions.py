@@ -208,7 +208,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         # results should be the same
         df1 = self.df.withColumn("preds", identity(struct("a"))).toPandas()
         df2 = self.df.withColumn("preds", identity(struct("a"))).toPandas()
-        self.assertTrue(df1.equals(df2))
+        self.assertTrue(df1.equals(df2), f"df1\n{df1}\n\ndf3\n{df2}")
 
         identity = predict_batch_udf(make_predict_fn, return_type=DoubleType(), batch_size=5)
 
