@@ -39,7 +39,6 @@ from typing import (
     overload,
     Callable,
     cast,
-    Type,
 )
 
 import copy
