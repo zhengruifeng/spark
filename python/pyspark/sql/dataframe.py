@@ -19,6 +19,7 @@
 
 import sys
 import random
+import warnings
 from typing import (
     Any,
     Callable,
@@ -28,7 +29,10 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
+    Type,
+    Iterable,
     Union,
+    cast,
     overload,
     TYPE_CHECKING,
 )
@@ -5113,6 +5117,118 @@ class DataFrame:
         +----+------+-----+
         """
         ...
+
+    def _prepare_args_for_replace(
+        self,
+        to_replace: Union[
+            "LiteralType", List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]
+        ],
+        value: Optional[
+            Union["OptionalPrimitiveType", List["OptionalPrimitiveType"], _NoValueType]
+        ] = _NoValue,
+        subset: Optional[List[str]] = None,
+    ) -> Tuple[Optional[List[str]], Dict]:
+        from pyspark.errors import PySparkTypeError, PySparkValueError
+
+        if value is _NoValue:
+            if isinstance(to_replace, dict):
+                value = None
+            else:
+                raise PySparkTypeError(
+                    errorClass="ARGUMENT_REQUIRED",
+                    messageParameters={"arg_name": "value", "condition": "`to_replace` is dict"},
+                )
+
+        # Helper functions
+        def all_of(types: Union[Type, Tuple[Type, ...]]) -> Callable[[Iterable], bool]:
+            """Given a type or tuple of types and a sequence of xs
+            check if each x is instance of type(s)
+
+            >>> all_of(bool)([True, False])
+            True
+            >>> all_of(str)(["a", 1])
+            False
+            """
+
+            def all_of_(xs: Iterable) -> bool:
+                return all(isinstance(x, types) for x in xs)
+
+            return all_of_
+
+        all_of_bool = all_of(bool)
+        all_of_str = all_of(str)
+        all_of_numeric = all_of((float, int))
+
+        # Validate input types
+        valid_types = (bool, float, int, str, list, tuple)
+        if not isinstance(to_replace, valid_types + (dict,)):
+            raise PySparkTypeError(
+                errorClass="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+                messageParameters={
+                    "arg_name": "to_replace",
+                    "arg_type": type(to_replace).__name__,
+                },
+            )
+
+        if (
+            not isinstance(value, valid_types)
+            and value is not None
+            and not isinstance(to_replace, dict)
+        ):
+            raise PySparkTypeError(
+                errorClass="NOT_BOOL_OR_FLOAT_OR_INT_OR_LIST_OR_NONE_OR_STR_OR_TUPLE",
+                messageParameters={
+                    "arg_name": "value",
+                    "arg_type": type(value).__name__,
+                },
+            )
+
+        if isinstance(to_replace, (list, tuple)) and isinstance(value, (list, tuple)):
+            if len(to_replace) != len(value):
+                raise PySparkValueError(
+                    errorClass="LENGTH_SHOULD_BE_THE_SAME",
+                    messageParameters={
+                        "arg1": "to_replace",
+                        "arg2": "value",
+                        "arg1_length": str(len(to_replace)),
+                        "arg2_length": str(len(value)),
+                    },
+                )
+
+        if not (subset is None or isinstance(subset, (list, tuple, str))):
+            raise PySparkTypeError(
+                errorClass="NOT_LIST_OR_STR_OR_TUPLE",
+                messageParameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+            )
+
+        # Reshape input arguments if necessary
+        if isinstance(to_replace, (float, int, str)):
+            to_replace = [to_replace]
+
+        if isinstance(to_replace, dict):
+            rep_dict = to_replace
+            if value is not None:
+                warnings.warn("to_replace is a dict and value is not None. value will be ignored.")
+        else:
+            if isinstance(value, (float, int, str)) or value is None:
+                value = [value for _ in range(len(to_replace))]
+            rep_dict = dict(zip(to_replace, cast("Iterable[Optional[Union[float, str]]]", value)))
+
+        if isinstance(subset, str):
+            subset = [subset]
+
+        # Verify we were not passed in mixed type generics.
+        if not any(
+            all_of_type(rep_dict.keys())
+            and all_of_type(x for x in rep_dict.values() if x is not None)
+            for all_of_type in [all_of_bool, all_of_str, all_of_numeric]
+        ):
+            raise PySparkValueError(
+                errorClass="MIXED_TYPE_REPLACEMENT",
+                messageParameters={},
+            )
+
+        return subset, rep_dict
 
     @overload
     def approxQuantile(
