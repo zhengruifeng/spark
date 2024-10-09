@@ -19,6 +19,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 
 subprocess_check_output = subprocess.check_output
 
@@ -48,6 +49,7 @@ def run_cmd(cmd, return_output=False):
     Given a command as a list of arguments will attempt to execute the command
     and, on failure, print an error message and exit.
     """
+    start = time.time()
 
     if not isinstance(cmd, list):
         cmd = cmd.split()
@@ -58,6 +60,9 @@ def run_cmd(cmd, return_output=False):
             return subprocess.run(cmd, universal_newlines=True, check=True)
     except subprocess.CalledProcessError as e:
         exit_from_command_with_retcode(e.cmd, e.returncode)
+    finally:
+        end = time.time()
+        print(f"Command took {end - start:,.2f} seconds")
 
 
 def is_exe(path):

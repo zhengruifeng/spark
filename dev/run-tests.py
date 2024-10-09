@@ -23,6 +23,7 @@ import os
 import re
 import sys
 import subprocess
+import time
 
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
@@ -150,6 +151,8 @@ def exec_sbt(sbt_args=()):
     """Will call SBT in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
+    start = time.time()
+
     sbt_cmd = [os.path.join(SPARK_HOME, "build", "sbt")] + sbt_args
 
     sbt_output_filter = re.compile(
@@ -167,6 +170,9 @@ def exec_sbt(sbt_args=()):
         if not sbt_output_filter.match(line):
             print(line.decode("utf-8"), end="")
     retcode = sbt_proc.wait()
+
+    end = time.time()
+    print(f"Command took {end - start:,.2f} seconds")
 
     if retcode != 0:
         exit_from_command_with_retcode(sbt_cmd, retcode)
