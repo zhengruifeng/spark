@@ -19,8 +19,17 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 
 subprocess_check_output = subprocess.check_output
+
+
+def print_duration(start, end):
+    line_str = "*" * 72
+    print()
+    print(line_str)
+    print(f"COMMAND TOOK {end - start:,.2f} SECONDS")
+    print(line_str)
 
 
 def exit_from_command_with_retcode(cmd, retcode):
@@ -48,6 +57,7 @@ def run_cmd(cmd, return_output=False):
     Given a command as a list of arguments will attempt to execute the command
     and, on failure, print an error message and exit.
     """
+    start = time.time()
 
     if not isinstance(cmd, list):
         cmd = cmd.split()
@@ -58,6 +68,8 @@ def run_cmd(cmd, return_output=False):
             return subprocess.run(cmd, universal_newlines=True, check=True)
     except subprocess.CalledProcessError as e:
         exit_from_command_with_retcode(e.cmd, e.returncode)
+    finally:
+        print_duration(start, time.time())
 
 
 def is_exe(path):
