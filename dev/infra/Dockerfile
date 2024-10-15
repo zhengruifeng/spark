@@ -64,6 +64,9 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     wget \
     zlib1g-dev \
+    && apt-get remove --purge -y 'gfortran-11' 'humanity-icon-theme' 'nodejs-doc' \
+    && apt-get autoremove --purge -y \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 
@@ -150,8 +153,3 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.13
 RUN python3.13 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
 RUN python3.13 -m pip install lxml numpy>=2.1 && \
     python3.13 -m pip cache purge
-
-# Remove unused installation packages to free up disk space
-RUN apt-get remove --purge -y 'gfortran-11' 'humanity-icon-theme' 'nodejs-doc' || true
-RUN apt-get autoremove --purge -y
-RUN apt-get clean
