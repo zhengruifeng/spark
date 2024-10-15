@@ -64,7 +64,7 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     wget \
     zlib1g-dev \
-    && apt-get remove --purge -y gfortran-11 humanity-icon-theme nodejs-doc \
+    && apt-get remove --purge -y humanity-icon-theme nodejs-doc \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
