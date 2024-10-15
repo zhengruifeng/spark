@@ -30,6 +30,8 @@ def print_duration(start, end):
     print(line_str)
     print(f"COMMAND TOOK {end - start:,.2f} SECONDS")
     print(line_str)
+    print()
+    print()
 
 
 def exit_from_command_with_retcode(cmd, retcode):
