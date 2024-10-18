@@ -59,6 +59,7 @@ jobs:
       required: ${{ steps.set-outputs.outputs.required }}
       image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
       image_docs_url: ${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}
+      image_r_url: ${{ steps.infra-image-r-outputs.outputs.image_r_url }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -143,6 +144,14 @@ jobs:
         IMG_NAME="apache-spark-ci-image-docs:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_docs_url=$IMG_URL" >> $GITHUB_OUTPUT
+    - name: Generate infra image URL (R)
+      id: infra-image-r-outputs
+      run: |
+        # Convert to lowercase to meet Docker repo name requirement
+        REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        IMG_NAME="apache-spark-ci-image-r:${{ inputs.branch }}-${{ github.run_id }}"
+        IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
+        echo "image_r_url=$IMG_URL" >> $GITHUB_OUTPUT
 
   # Build: build Spark and run the tests for specified modules.
   build:
@@ -370,6 +379,16 @@ jobs:
             ${{ needs.precondition.outputs.image_docs_url }}
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ inputs.branch }}
+      - name: Build and push (R)
+        id: docker_build_r
+        uses: docker/build-push-action@v6
+        with:
+          context: ./dev/infra/r/
+          push: true
+          tags: |
+            ${{ needs.precondition.outputs.image_r_url }}
+          # Use the infra image cache to speed up
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-r-cache:${{ inputs.branch }}
 
 
   pyspark:
@@ -529,7 +548,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     container:
-      image: ${{ needs.precondition.outputs.image_url }}
+      image: ${{ needs.precondition.outputs.image_url_r }}
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3

@@ -72,3 +72,14 @@ jobs:
           cache-to: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ github.ref_name }},mode=max
       - name: Image digest (Documentation)
         run: echo ${{ steps.docker_build_docs.outputs.digest }}
+      - name: Build and push (R)
+        id: docker_build_r
+        uses: docker/build-push-action@v6
+        with:
+          context: ./dev/infra/r/
+          push: true
+          tags: ghcr.io/apache/spark/apache-spark-github-action-image-r-cache:${{ github.ref_name }}-static
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-r-cache:${{ github.ref_name }}
+          cache-to: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-r-cache:${{ github.ref_name }},mode=max
+      - name: Image digest (R)
+        run: echo ${{ steps.docker_build_r.outputs.digest }}
