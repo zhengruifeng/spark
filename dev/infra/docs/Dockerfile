@@ -86,17 +86,6 @@ ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library
 # See 'ipython_genutils' in SPARK-38517
 # See 'docutils<0.18.0' in SPARK-39421
 RUN python3.9 -m pip install \
-    'ipython' \
-    'ipython_genutils' \
-    'jinja2' \
-    'markupsafe' \
-    'mkdocs' \
-    'nbsphinx' \
-    'numpydoc' \
-    'pandas' \
-    'pyarrow' \
-    'sphinx-copybutton' \
-    'sphinx_plotly_directive' \
     'black==23.9.1' \
     'docutils<0.18.0' \
     'flake8==3.9.0' \
@@ -104,15 +93,26 @@ RUN python3.9 -m pip install \
     'grpc-stubs==1.24.11' \
     'grpcio-status==1.62.0' \
     'grpcio==1.62.0' \
+    'ipython' \
+    'ipython_genutils' \
+    'jinja2' \
+    'markupsafe' \
+    'mkdocs' \
     'mypy==1.8.0' \
-    'numpy>=1.20.0' \
+    'nbsphinx' \
+    'numpy==1.26.4' \
+    'numpydoc' \
+    'pandas' \
     'pandas-stubs==1.2.0.53' \
     'plotly>=4.8' \
+    'pyarrow' \
     'pydata_sphinx_theme>=0.13' \
     'pytest-mypy-plugins==1.9.3' \
     'pytest==7.1.3' \
     'pyzmq<24.0.0' \
+    'sphinx-copybutton' \
     'sphinx==4.5.0' \
+    'sphinx_plotly_directive' \
     'sphinxcontrib-applehelp==1.0.4' \
     'sphinxcontrib-devhelp==1.0.2' \
     'sphinxcontrib-htmlhelp==2.0.1' \
