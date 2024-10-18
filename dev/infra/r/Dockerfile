@@ -55,6 +55,8 @@ RUN apt-get update && apt-get install -y \
     openjdk-17-jdk-headless \
     pandoc \
     pkg-config \
+    python3.10 \
+    python3-psutil \
     qpdf \
     r-base \
     ruby \
