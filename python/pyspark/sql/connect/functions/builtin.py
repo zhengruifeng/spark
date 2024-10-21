@@ -267,7 +267,7 @@ def lit(col: Any) -> Column:
             )
         return array(*[lit(c) for c in col])
     elif isinstance(col, np.ndarray) and col.ndim == 1:
-        if _from_numpy_type(col.dtype) is None:
+        if _from_numpy_type(col.dtype) is None and not np.issubdtype(col.dtype, np.str_):
             raise PySparkTypeError(
                 errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
                 messageParameters={"dtype": col.dtype.name},

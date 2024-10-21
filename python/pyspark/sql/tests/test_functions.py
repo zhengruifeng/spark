@@ -1245,6 +1245,7 @@ class FunctionsTestsMixin:
             ("int64", [("b", "array<bigint>")]),
             ("float32", [("b", "array<float>")]),
             ("float64", [("b", "array<double>")]),
+            ("str", [("b", "array<string>")]),
         ]
         for t, expected_spark_dtypes in arr_dtype_to_spark_dtypes:
             arr = np.array([1, 2]).astype(t)
