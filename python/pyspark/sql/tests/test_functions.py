@@ -1211,6 +1211,7 @@ class FunctionsTestsMixin:
             (np.float32, [("1.0", "float")]),
             (np.float64, [("1.0", "double")]),
             (np.bool_, [("true", "boolean")]),
+            (np.str_, [("true", "boolean")]),
         ]
         for dtype, spark_dtypes in dtype_to_spark_dtypes:
             with self.subTest(dtype):
@@ -1239,12 +1240,14 @@ class FunctionsTestsMixin:
         import numpy as np
 
         arr_dtype_to_spark_dtypes = [
-            ("int8", [("b", "array<smallint>")]),
+            ("bool", [("b", "array<boolean>")]),
+            ("int8", [("b", "array<tinyint>")]),
             ("int16", [("b", "array<smallint>")]),
             ("int32", [("b", "array<int>")]),
             ("int64", [("b", "array<bigint>")]),
             ("float32", [("b", "array<float>")]),
             ("float64", [("b", "array<double>")]),
+            ("str", [("b", "array<double>")]),
         ]
         for t, expected_spark_dtypes in arr_dtype_to_spark_dtypes:
             arr = np.array([1, 2]).astype(t)

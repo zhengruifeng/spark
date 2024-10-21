@@ -2167,7 +2167,9 @@ def _from_numpy_type(nt: "np.dtype") -> Optional[DataType]:
     """Convert NumPy type to Spark data type."""
     import numpy as np
 
-    if nt == np.dtype("int8"):
+    if nt == np.dtype("bool"):
+        return BooleanType()
+    elif nt == np.dtype("int8"):
         return ByteType()
     elif nt == np.dtype("int16"):
         return ShortType()

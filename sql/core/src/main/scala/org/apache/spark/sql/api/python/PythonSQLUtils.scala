@@ -170,8 +170,6 @@ private[sql] object PythonSQLUtils extends Logging {
       case (v: Number, dt: LongType) => Literal(v.longValue(), dt)
       case (v: Number, dt: FloatType) => Literal(v.floatValue(), dt)
       case (v: Number, dt: DoubleType) => Literal(v.doubleValue(), dt)
-      case (v: String, dt: StringType) => Literal.create(v, dt)
-      case (v: String, dt: DecimalType) => Literal.create(Decimal.apply(v), dt)
       case _ =>
         throw new IllegalArgumentException(
           s"Unsupported value type ${value.getClass.getName} " +
