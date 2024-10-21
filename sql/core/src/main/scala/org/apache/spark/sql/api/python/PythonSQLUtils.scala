@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 private[sql] object PythonSQLUtils extends Logging {
@@ -159,6 +159,26 @@ private[sql] object PythonSQLUtils extends Logging {
 
   @scala.annotation.varargs
   def internalFn(name: String, inputs: Column*): Column = Column.internalFn(name, inputs: _*)
+
+  def typedLit(value: Any, dataType: String): Column = {
+    val lit = (value, DataType.fromJson(dataType)) match {
+      case (null, dt: DataType) => Literal.create(null, dt)
+      case (v: Boolean, dt: BooleanType) => Literal(v, dt)
+      case (v: Number, dt: ByteType) => Literal(v.byteValue(), dt)
+      case (v: Number, dt: ShortType) => Literal(v.shortValue(), dt)
+      case (v: Number, dt: IntegerType) => Literal(v.intValue(), dt)
+      case (v: Number, dt: LongType) => Literal(v.longValue(), dt)
+      case (v: Number, dt: FloatType) => Literal(v.floatValue(), dt)
+      case (v: Number, dt: DoubleType) => Literal(v.doubleValue(), dt)
+      case (v: String, dt: StringType) => Literal.create(v, dt)
+      case (v: String, dt: DecimalType) => Literal.create(Decimal.apply(v), dt)
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Unsupported value type ${value.getClass.getName} " +
+          s"for data type $dataType")
+    }
+    column(lit)
+  }
 }
 
 /**

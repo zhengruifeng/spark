@@ -221,12 +221,23 @@ def lit(col: Any) -> Column:
                 errorClass="COLUMN_IN_LIST", messageParameters={"func_name": "lit"}
             )
         return array(*[lit(item) for item in col])
-    else:
-        if _has_numpy and isinstance(col, np.generic):
+    elif _has_numpy:
+        if isinstance(col, np.generic):
             dt = _from_numpy_type(col.dtype)
             if dt is not None:
-                return _invoke_function("lit", _enum_to_value(col)).astype(dt).alias(str(col))
-        return _invoke_function("lit", _enum_to_value(col))
+                from py4j.java_gateway import JVMView
+
+                sc = _get_active_spark_context()
+                return Column(cast(JVMView, sc._jvm).PythonSQLUtils.typedLit(col, dt.json()))
+        elif isinstance(col, np.ndarray) and col.ndim == 1:
+            if _from_numpy_type(col.dtype) is None:
+                raise PySparkTypeError(
+                    errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+                    messageParameters={"dtype": col.dtype.name},
+                )
+            return array(*[lit(c) for c in col])
+
+    return _invoke_function("lit", _enum_to_value(col))
 
 
 @_try_remote_functions
