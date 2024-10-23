@@ -8582,6 +8582,11 @@ def extract(field: Union[Column, str], source: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         a part of the date/timestamp or interval source.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.date_part`
+
     Examples
     --------
     >>> import datetime
@@ -8627,6 +8632,11 @@ def date_part(field: Union[Column, str], source: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         a part of the date/timestamp or interval source.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.extract`
+
     Examples
     --------
     >>> import datetime
@@ -8671,6 +8681,11 @@ def datepart(field: Union[Column, str], source: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         a part of the date/timestamp or interval source.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.extract`
 
     Examples
     --------
