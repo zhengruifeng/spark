@@ -8564,7 +8564,7 @@ def dayname(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def extract(field: Union[Column, str], source: "ColumnOrName") -> Column:
     """
     Extracts a part of the date/timestamp or interval source.
 
@@ -8572,9 +8572,9 @@ def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    field : :class:`~pyspark.sql.Column` or str
+    field : :class:`~pyspark.sql.Column` or literal string
         selects which part of the source should be extracted.
-    source : :class:`~pyspark.sql.Column` or str
+    source : :class:`~pyspark.sql.Column` or column name
         a date/timestamp or interval column from where `field` should be extracted.
 
     Returns
@@ -8585,22 +8585,30 @@ def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
     Examples
     --------
     >>> import datetime
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
     >>> df.select(
-    ...     extract(lit('YEAR'), 'ts').alias('year'),
-    ...     extract(lit('month'), 'ts').alias('month'),
-    ...     extract(lit('WEEK'), 'ts').alias('week'),
-    ...     extract(lit('D'), 'ts').alias('day'),
-    ...     extract(lit('M'), 'ts').alias('minute'),
-    ...     extract(lit('S'), 'ts').alias('second')
-    ... ).collect()
-    [Row(year=2015, month=4, week=15, day=8, minute=8, second=Decimal('15.000000'))]
-    """
+    ...     "*",
+    ...     sf.extract('YEAR', 'ts'),
+    ...     sf.extract('MONTH', 'ts'),
+    ...     sf.extract('WEEK', 'ts'),
+    ...     sf.extract(sf.lit('D'), 'ts'),
+    ...     sf.extract(sf.lit('M'), 'ts'),
+    ...     sf.extract(sf.lit('S'), 'ts')
+    ... ).show()
+    +-------------------+---------------------+----------------------+---------------------+------------------+------------------+------------------+
+    |                 ts|extract(YEAR FROM ts)|extract(MONTH FROM ts)|extract(WEEK FROM ts)|extract(D FROM ts)|extract(M FROM ts)|extract(S FROM ts)|
+    +-------------------+---------------------+----------------------+---------------------+------------------+------------------+------------------+
+    |2015-04-08 13:08:15|                 2015|                     4|                   15|                 8|                 8|         15.000000|
+    +-------------------+---------------------+----------------------+---------------------+------------------+------------------+------------------+
+    """  # noqa: E501
+    if isinstance(field, str):
+        return _invoke_function_over_columns("extract", lit(field), source)
     return _invoke_function_over_columns("extract", field, source)
 
 
 @_try_remote_functions
-def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def date_part(field: Union[Column, str], source: "ColumnOrName") -> Column:
     """
     Extracts a part of the date/timestamp or interval source.
 
@@ -8608,10 +8616,10 @@ def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    field : :class:`~pyspark.sql.Column` or str
+    field : :class:`~pyspark.sql.Column` or literal string
         selects which part of the source should be extracted, and supported string values
         are as same as the fields of the equivalent function `extract`.
-    source : :class:`~pyspark.sql.Column` or str
+    source : :class:`~pyspark.sql.Column` or column name
         a date/timestamp or interval column from where `field` should be extracted.
 
     Returns
@@ -8622,22 +8630,30 @@ def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
     Examples
     --------
     >>> import datetime
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
     >>> df.select(
-    ...     date_part(lit('YEAR'), 'ts').alias('year'),
-    ...     date_part(lit('month'), 'ts').alias('month'),
-    ...     date_part(lit('WEEK'), 'ts').alias('week'),
-    ...     date_part(lit('D'), 'ts').alias('day'),
-    ...     date_part(lit('M'), 'ts').alias('minute'),
-    ...     date_part(lit('S'), 'ts').alias('second')
-    ... ).collect()
-    [Row(year=2015, month=4, week=15, day=8, minute=8, second=Decimal('15.000000'))]
-    """
+    ...     "*",
+    ...     sf.date_part('YEAR', 'ts'),
+    ...     sf.date_part('MONTH', 'ts'),
+    ...     sf.date_part('WEEK', 'ts'),
+    ...     sf.date_part(sf.lit('D'), 'ts'),
+    ...     sf.date_part(sf.lit('M'), 'ts'),
+    ...     sf.date_part(sf.lit('S'), 'ts')
+    ... ).show()
+    +-------------------+-------------------+--------------------+-------------------+----------------+----------------+----------------+
+    |                 ts|date_part(YEAR, ts)|date_part(MONTH, ts)|date_part(WEEK, ts)|date_part(D, ts)|date_part(M, ts)|date_part(S, ts)|
+    +-------------------+-------------------+--------------------+-------------------+----------------+----------------+----------------+
+    |2015-04-08 13:08:15|               2015|                   4|                 15|               8|               8|       15.000000|
+    +-------------------+-------------------+--------------------+-------------------+----------------+----------------+----------------+
+    """  # noqa: E501
+    if isinstance(field, str):
+        return _invoke_function_over_columns("date_part", lit(field), source)
     return _invoke_function_over_columns("date_part", field, source)
 
 
 @_try_remote_functions
-def datepart(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def datepart(field: Union[Column, str], source: "ColumnOrName") -> Column:
     """
     Extracts a part of the date/timestamp or interval source.
 
@@ -8645,10 +8661,10 @@ def datepart(field: "ColumnOrName", source: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    field : :class:`~pyspark.sql.Column` or str
+    field : :class:`~pyspark.sql.Column` or literal string
         selects which part of the source should be extracted, and supported string values
         are as same as the fields of the equivalent function `extract`.
-    source : :class:`~pyspark.sql.Column` or str
+    source : :class:`~pyspark.sql.Column` or column name
         a date/timestamp or interval column from where `field` should be extracted.
 
     Returns
@@ -8659,17 +8675,25 @@ def datepart(field: "ColumnOrName", source: "ColumnOrName") -> Column:
     Examples
     --------
     >>> import datetime
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
     >>> df.select(
-    ...     datepart(lit('YEAR'), 'ts').alias('year'),
-    ...     datepart(lit('month'), 'ts').alias('month'),
-    ...     datepart(lit('WEEK'), 'ts').alias('week'),
-    ...     datepart(lit('D'), 'ts').alias('day'),
-    ...     datepart(lit('M'), 'ts').alias('minute'),
-    ...     datepart(lit('S'), 'ts').alias('second')
-    ... ).collect()
-    [Row(year=2015, month=4, week=15, day=8, minute=8, second=Decimal('15.000000'))]
-    """
+    ...     "*",
+    ...     sf.datepart('YEAR', 'ts'),
+    ...     sf.datepart('MONTH', 'ts'),
+    ...     sf.datepart('WEEK', 'ts'),
+    ...     sf.datepart(sf.lit('D'), 'ts'),
+    ...     sf.datepart(sf.lit('M'), 'ts'),
+    ...     sf.datepart(sf.lit('S'), 'ts')
+    ... ).show()
+    +-------------------+----------------------+-----------------------+----------------------+-------------------+-------------------+-------------------+
+    |                 ts|datepart(YEAR FROM ts)|datepart(MONTH FROM ts)|datepart(WEEK FROM ts)|datepart(D FROM ts)|datepart(M FROM ts)|datepart(S FROM ts)|
+    +-------------------+----------------------+-----------------------+----------------------+-------------------+-------------------+-------------------+
+    |2015-04-08 13:08:15|                  2015|                      4|                    15|                  8|                  8|          15.000000|
+    +-------------------+----------------------+-----------------------+----------------------+-------------------+-------------------+-------------------+
+    """  # noqa: E501
+    if isinstance(field, str):
+        return _invoke_function_over_columns("datepart", lit(field), source)
     return _invoke_function_over_columns("datepart", field, source)
 
 
