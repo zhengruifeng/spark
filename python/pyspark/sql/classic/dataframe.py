@@ -55,7 +55,6 @@ from pyspark.serializers import BatchedSerializer, CPickleSerializer, UTF8Deseri
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.column import Column
-from pyspark.sql.functions import builtin as F
 from pyspark.sql.classic.column import _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.merge import MergeIntoWriter
@@ -141,6 +140,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         # Check whether _repr_html is supported or not, we use it to avoid calling _jdf twice
         # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
+        self._frame_type = "classic"
 
     @property
     def sql_ctx(self) -> "SQLContext":
@@ -839,7 +839,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         *cols: Union[int, str, Column, List[Union[int, str, Column]]],
         **kwargs: Any,
     ) -> ParentDataFrame:
-        _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
+        _cols = self._preapare_cols_for_sort(cols, kwargs)
         jdf = self._jdf.sortWithinPartitions(self._jseq(_cols, _to_java_column))
         return DataFrame(jdf, self.sparkSession)
 
@@ -848,7 +848,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         *cols: Union[int, str, Column, List[Union[int, str, Column]]],
         **kwargs: Any,
     ) -> ParentDataFrame:
-        _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
+        _cols = self._preapare_cols_for_sort(cols, kwargs)
         jdf = self._jdf.sort(self._jseq(_cols, _to_java_column))
         return DataFrame(jdf, self.sparkSession)
 

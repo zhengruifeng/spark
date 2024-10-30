@@ -2942,11 +2942,15 @@ class DataFrame:
 
     def _preapare_cols_for_sort(
         self,
-        _to_col: Callable[[str], Column],
         cols: Sequence[Union[int, str, Column, List[Union[int, str, Column]]]],
         kwargs: Dict[str, Any],
     ) -> Sequence[Column]:
         from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkIndexError
+
+        if self._frame_type == "connect":
+            from pyspark.sql.connect.functions import builtin as F
+        else:
+            from pyspark.sql.functions import builtin as F
 
         if not cols:
             raise PySparkValueError(
@@ -2973,7 +2977,7 @@ class DataFrame:
             elif isinstance(c, Column):
                 _cols.append(c)
             elif isinstance(c, str):
-                _cols.append(_to_col(c))
+                _cols.append(F.col(c))
             else:
                 raise PySparkTypeError(
                     errorClass="NOT_COLUMN_OR_INT_OR_STR",

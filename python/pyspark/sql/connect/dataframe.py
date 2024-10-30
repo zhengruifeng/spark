@@ -140,6 +140,7 @@ class DataFrame(ParentDataFrame):
         self._support_repr_html = False
         self._cached_schema: Optional[StructType] = None
         self._execution_info: Optional["ExecutionInfo"] = None
+        self._frame_type = "connect"
 
     def __reduce__(self) -> Tuple:
         """
@@ -740,7 +741,7 @@ class DataFrame(ParentDataFrame):
         *cols: Union[int, str, Column, List[Union[int, str, Column]]],
         **kwargs: Any,
     ) -> ParentDataFrame:
-        _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
+        _cols = self._preapare_cols_for_sort(cols, kwargs)
         res = DataFrame(
             plan.Sort(
                 self._plan,
@@ -759,7 +760,7 @@ class DataFrame(ParentDataFrame):
         *cols: Union[int, str, Column, List[Union[int, str, Column]]],
         **kwargs: Any,
     ) -> ParentDataFrame:
-        _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
+        _cols = self._preapare_cols_for_sort(cols, kwargs)
         res = DataFrame(
             plan.Sort(
                 self._plan,
