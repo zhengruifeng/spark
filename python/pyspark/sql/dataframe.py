@@ -2950,7 +2950,7 @@ class DataFrame:
         if self._frame_type == "connect":
             from pyspark.sql.connect.functions import builtin as F
         else:
-            from pyspark.sql.functions import builtin as F
+            from pyspark.sql.functions import builtin as F  # type: ignore[no-redef]
 
         if not cols:
             raise PySparkValueError(
