@@ -40,8 +40,6 @@ from typing import (
 import random
 import sys
 
-import numpy as np
-
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import _with_origin
 from pyspark.sql.dataframe import DataFrame as ParentDataFrame
@@ -258,6 +256,7 @@ column = col
 
 
 def lit(col: Any) -> Column:
+    import numpy as np
     from pyspark.sql.connect.column import Column as ConnectColumn
 
     if isinstance(col, Column):

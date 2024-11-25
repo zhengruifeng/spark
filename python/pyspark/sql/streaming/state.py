@@ -19,7 +19,6 @@ import json
 from typing import Tuple, Optional
 
 from pyspark.sql.types import Row, StructType, TimestampType
-from pyspark.sql.utils import has_numpy
 from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkRuntimeError
 
 __all__ = ["GroupState", "GroupStateTimeout"]
@@ -139,7 +138,7 @@ class GroupState:
             )
 
         converted = []
-        if has_numpy:
+        try:
             import numpy as np
 
             # In order to convert NumPy types to Python primitive types.
@@ -153,7 +152,7 @@ class GroupState:
                     converted.append(v.to_pydatetime())
                 else:
                     converted.append(v)
-        else:
+        except ImportError:
             converted = list(newValue)
 
         self._value = Row(*converted)

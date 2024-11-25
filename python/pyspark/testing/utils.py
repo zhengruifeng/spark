@@ -847,25 +847,23 @@ def assertDataFrameEqual(
             },
         )
 
-    has_pandas = False
     try:
         # If pandas dependencies are available, allow pandas or pandas-on-Spark DataFrame
         import pandas as pd
 
-        has_pandas = True
+        have_pandas = True
     except ImportError:
         # no pandas, so we won't call pandasutils functions
-        pass
+        have_pandas = False
 
-    has_arrow = False
     try:
         import pyarrow
 
-        has_arrow = True
+        have_pyarrow = True
     except ImportError:
-        pass
+        have_pyarrow = False
 
-    if has_pandas and has_arrow:
+    if have_pandas and have_pyarrow:
         import pyspark.pandas as ps
         from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 

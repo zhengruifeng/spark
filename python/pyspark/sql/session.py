@@ -1513,25 +1513,25 @@ class SparkSession(SparkConversionMixin):
         try:
             import pandas as pd
 
-            has_pandas = True
+            have_pandas = True
         except Exception:
-            has_pandas = False
+            have_pandas = False
 
         try:
             import numpy as np
 
-            has_numpy = True
+            have_numpy = True
         except Exception:
-            has_numpy = False
+            have_numpy = False
 
         try:
             import pyarrow as pa
 
-            has_pyarrow = True
+            have_pyarrow = True
         except Exception:
-            has_pyarrow = False
+            have_pyarrow = False
 
-        if has_numpy and isinstance(data, np.ndarray):
+        if have_numpy and isinstance(data, np.ndarray):
             # `data` of numpy.ndarray type will be converted to a pandas DataFrame,
             # so pandas is required.
             from pyspark.sql.pandas.utils import require_minimum_pandas_version
@@ -1559,12 +1559,12 @@ class SparkSession(SparkConversionMixin):
 
             data = pd.DataFrame(data, columns=column_names)
 
-        if has_pandas and isinstance(data, pd.DataFrame):
+        if have_pandas and isinstance(data, pd.DataFrame):
             # Create a DataFrame from pandas DataFrame.
             return super(SparkSession, self).createDataFrame(  # type: ignore[call-overload]
                 data, schema, samplingRatio, verifySchema
             )
-        if has_pyarrow and isinstance(data, pa.Table):
+        if have_pyarrow and isinstance(data, pa.Table):
             # Create a DataFrame from PyArrow Table.
             return super(SparkSession, self).createDataFrame(  # type: ignore[call-overload]
                 data, schema, samplingRatio, verifySchema

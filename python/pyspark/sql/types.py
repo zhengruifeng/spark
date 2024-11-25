@@ -49,7 +49,6 @@ from typing import (
 from pyspark.util import is_remote_only, JVM_INT_MAX
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import (
-    has_numpy,
     get_active_spark_context,
     escape_meta_characters,
     StringConcat,
@@ -64,9 +63,6 @@ from pyspark.errors import (
     PySparkAttributeError,
     PySparkKeyError,
 )
-
-if has_numpy:
-    import numpy as np
 
 if TYPE_CHECKING:
     import numpy as np
@@ -3250,7 +3246,12 @@ class DayTimeIntervalTypeConverter:
 
 class NumpyScalarConverter:
     def can_convert(self, obj: Any) -> bool:
-        return has_numpy and isinstance(obj, np.generic)
+        try:
+            import numpy as np
+
+            return isinstance(obj, np.generic)
+        except ImportError:
+            return False
 
     def convert(self, obj: "np.generic", gateway_client: "GatewayClient") -> Any:
         return obj.item()
@@ -3260,6 +3261,8 @@ class NumpyArrayConverter:
     def _from_numpy_type_to_java_type(
         self, nt: "np.dtype", gateway: "JavaGateway"
     ) -> Optional["JavaClass"]:
+        import numpy as np
+
         """Convert NumPy type to Py4J Java type."""
         if nt in [np.dtype("int8"), np.dtype("int16")]:
             # Mapping int8 to gateway.jvm.byte causes
@@ -3281,7 +3284,12 @@ class NumpyArrayConverter:
         return None
 
     def can_convert(self, obj: Any) -> bool:
-        return has_numpy and isinstance(obj, np.ndarray) and obj.ndim == 1
+        try:
+            import numpy as np
+
+            return isinstance(obj, np.ndarray) and obj.ndim == 1
+        except ImportError:
+            return False
 
     def convert(self, obj: "np.ndarray", gateway_client: "GatewayClient") -> "JavaGateway":
         from pyspark import SparkContext
