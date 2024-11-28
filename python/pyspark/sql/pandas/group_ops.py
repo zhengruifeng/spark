@@ -259,13 +259,19 @@ class PandasGroupedOpsMixin:
 
         assert isinstance(self, GroupedData)
 
+        if isinstance(reduceSchema, str):
+            reduceSchema = cast(StructType, _parse_datatype_string(reduceSchema))
+        if isinstance(mergeSchema, str):
+            mergeSchema = cast(StructType, _parse_datatype_string(mergeSchema))
+
         udf1 = pandas_udf(reduceFunc, returnType=reduceSchema, functionType=PandasUDFType.GROUPED_MAP)
         udf_column_1 = udf1(*[col(c) for c in self._df.columns])
-        jdf1 = self._jgd.flatMapGroupsInPandas(udf_column_1._jc, False)
-        df1 = DataFrame(jdf1, self.session)
+        # jdf1 = self._jgd.flatMapGroupsInPandas(udf_column_1._jc, False)
+        # df1 = DataFrame(jdf1, self.session)
 
         udf2 = pandas_udf(mergeFunc, returnType=mergeSchema, functionType=PandasUDFType.GROUPED_MAP)
-        udf_column_2 = udf2(*[col(c) for c in df1.columns])
+        # udf_column_2 = udf2(*[col(c) for c in df1.columns])
+        udf_column_2 = udf2(*[col(c) for c in reduceSchema.fieldNames()])
         jdf2 = self._jgd.aggregateInPandas(udf_column_1._jc, udf_column_2._jc)
         return DataFrame(jdf2, self.session)
 
