@@ -293,10 +293,10 @@ class RelationalGroupedDataset protected[sql](
     flatMapGroupsInPandas(column, global = true)
   }
 
-  private[sql] def aggregateInPandas(column1: Column, column2: Column): DataFrame = {
-    val partial = flatMapGroupsInPandas(column1, global = false).logicalPlan
+  private[sql] def aggregateInPandas(partialCol: Column, finalCol: Column): DataFrame = {
+    val partial = flatMapGroupsInPandas(partialCol, global = false).logicalPlan
     val finalGroupingAttrs = partial.output.take(groupingExprs.length)
-    val finalExpr = column2.expr.asInstanceOf[PythonUDF]
+    val finalExpr = finalCol.expr.asInstanceOf[PythonUDF]
     val finalOutput = toAttributes(finalExpr.dataType.asInstanceOf[StructType])
     val plan = FlatMapGroupsInPandas(
       finalGroupingAttrs,
