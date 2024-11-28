@@ -268,7 +268,7 @@ class RelationalGroupedDataset protected[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def flatMapGroupsInPandas(column: Column): DataFrame = {
+  private[sql] def flatMapGroupsInPandas(column: Column, global: Boolean): DataFrame = {
     val expr = column.expr.asInstanceOf[PythonUDF]
     require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
       "Must pass a grouped map pandas udf")
@@ -284,9 +284,19 @@ class RelationalGroupedDataset protected[sql](
       Project(groupingNamedExpressions ++ child.output, child)).analyzed
     val groupingAttributes = project.output.take(groupingNamedExpressions.length)
     val output = toAttributes(expr.dataType.asInstanceOf[StructType])
-    val plan = FlatMapGroupsInPandas(groupingAttributes, expr, output, project)
+    val plan = FlatMapGroupsInPandas(groupingAttributes, expr, output, project, global)
 
     Dataset.ofRows(df.sparkSession, plan)
+  }
+
+  private[sql] def flatMapGroupsInPandas(column: Column): DataFrame = {
+    flatMapGroupsInPandas(column, global = true)
+  }
+
+  private[sql] def aggregateInPandas(column1: Column, column2: Column): DataFrame = {
+    flatMapGroupsInPandas(column1, global = false)
+      .groupBy(groupingExprs.map(column): _*)
+      .flatMapGroupsInPandas(column2, global = true)
   }
 
   /**
@@ -301,7 +311,7 @@ class RelationalGroupedDataset protected[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def flatMapGroupsInArrow(column: Column): DataFrame = {
+  private[sql] def flatMapGroupsInArrow(column: Column, global: Boolean): DataFrame = {
     val expr = column.expr.asInstanceOf[PythonUDF]
     require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
       "Must pass a grouped map arrow udf")
@@ -317,9 +327,13 @@ class RelationalGroupedDataset protected[sql](
       Project(groupingNamedExpressions ++ child.output, child)).analyzed
     val groupingAttributes = project.output.take(groupingNamedExpressions.length)
     val output = toAttributes(expr.dataType.asInstanceOf[StructType])
-    val plan = FlatMapGroupsInArrow(groupingAttributes, expr, output, project)
+    val plan = FlatMapGroupsInArrow(groupingAttributes, expr, output, project, global)
 
     Dataset.ofRows(df.sparkSession, plan)
+  }
+
+  private[sql] def flatMapGroupsInArrow(column: Column): DataFrame = {
+    flatMapGroupsInPandas(column, global = true)
   }
 
   /**

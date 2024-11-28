@@ -22,7 +22,7 @@ import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.python.PandasGroupUtils._
@@ -37,6 +37,7 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
   val func: Expression
   val output: Seq[Attribute]
   val child: SparkPlan
+  val global: Boolean
 
   protected val pythonEvalType: Int
 
@@ -54,10 +55,14 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    if (groupingAttributes.isEmpty) {
-      AllTuples :: Nil
+    if (global) {
+      if (groupingAttributes.isEmpty) {
+        AllTuples :: Nil
+      } else {
+        ClusteredDistribution(groupingAttributes) :: Nil
+      }
     } else {
-      ClusteredDistribution(groupingAttributes) :: Nil
+      UnspecifiedDistribution :: Nil
     }
   }
 

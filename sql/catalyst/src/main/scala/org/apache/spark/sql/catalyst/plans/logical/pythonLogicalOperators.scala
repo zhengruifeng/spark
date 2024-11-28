@@ -32,7 +32,8 @@ case class FlatMapGroupsInPandas(
     groupingAttributes: Seq[Attribute],
     functionExpr: Expression,
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    global: Boolean = true) extends UnaryNode {
 
   /**
    * This is needed because output attributes are considered `references` when
@@ -55,7 +56,8 @@ case class FlatMapGroupsInArrow(
     groupingAttributes: Seq[Attribute],
     functionExpr: Expression,
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    global: Boolean = true) extends UnaryNode {
 
   /**
    * This is needed because output attributes are considered `references` when

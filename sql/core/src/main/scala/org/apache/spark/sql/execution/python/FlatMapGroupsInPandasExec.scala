@@ -43,7 +43,8 @@ case class FlatMapGroupsInPandasExec(
     groupingAttributes: Seq[Attribute],
     func: Expression,
     output: Seq[Attribute],
-    child: SparkPlan)
+    child: SparkPlan,
+    global: Boolean)
   extends FlatMapGroupsInBatchExec {
 
   protected val pythonEvalType: Int = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF

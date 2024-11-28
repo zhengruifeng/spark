@@ -372,7 +372,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         if findAliases(aggregateExpressions).size == aggregateExpressions.size =>
         Nil
 
-      case oldVersion @ FlatMapGroupsInPandas(_, _, output, _)
+      case oldVersion @ FlatMapGroupsInPandas(_, _, output, _, _)
           if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
         newVersion.copyTagsFrom(oldVersion)
