@@ -294,18 +294,38 @@ class RelationalGroupedDataset protected[sql](
   }
 
   private[sql] def aggregateInPandas(partialCol: Column, finalCol: Column): DataFrame = {
-    val partial = flatMapGroupsInPandas(partialCol, global = false).logicalPlan
-    val finalGroupingAttrs = partial.output.take(groupingExprs.length)
-    val finalExpr = finalCol.expr.asInstanceOf[PythonUDF]
-    val finalOutput = toAttributes(finalExpr.dataType.asInstanceOf[StructType])
-    val plan = FlatMapGroupsInPandas(
-      finalGroupingAttrs,
-      finalExpr,
-      finalOutput,
-      partial,
-      global = true)
+    val partialExpr = partialCol.expr.asInstanceOf[PythonUDF]
+    require(partialExpr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+      "Must pass a grouped map pandas udf")
+    require(partialExpr.dataType.isInstanceOf[StructType],
+      s"The returnType of the udf must be a ${StructType.simpleString}")
+    val partialOutput = toAttributes(partialExpr.dataType.asInstanceOf[StructType])
 
-    Dataset.ofRows(df.sparkSession, plan)
+    val finalExpr = finalCol.expr.asInstanceOf[PythonUDF]
+    require(finalExpr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+      "Must pass a grouped map pandas udf")
+    require(finalExpr.dataType.isInstanceOf[StructType],
+      s"The returnType of the udf must be a ${StructType.simpleString}")
+    val finalOutput = toAttributes(finalExpr.dataType.asInstanceOf[StructType])
+
+    val spark = df.sparkSession
+    val groupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+    val child = df.logicalPlan
+    val project = spark.sessionState.executePlan(
+      Project(groupingNamedExpressions ++ child.output, child)).analyzed
+    val partialGrouping = project.output.take(groupingNamedExpressions.length)
+    val partialPlan = spark.sessionState.executePlan(
+      FlatMapGroupsInPandas(
+        partialGrouping, partialExpr, partialOutput, project, global = false)).analyzed
+
+    val finalGrouping = partialPlan.output.take(groupingNamedExpressions.length)
+    val plan = FlatMapGroupsInPandas(
+      finalGrouping, finalExpr, finalOutput, partialPlan, global = true)
+
+    Dataset.ofRows(spark, plan)
   }
 
   /**
