@@ -332,36 +332,12 @@ Hash Functions
     xxhash64
 
 
-Collection Functions
+Array, Map and Struct Functions
 --------------------
 .. autosummary::
     :toctree: api/
 
     aggregate
-    array_sort
-    cardinality
-    concat
-    element_at
-    exists
-    filter
-    forall
-    map_filter
-    map_zip_with
-    reduce
-    reverse
-    size
-    transform
-    transform_keys
-    transform_values
-    try_element_at
-    zip_with
-
-
-Array Functions
----------------
-.. autosummary::
-    :toctree: api/
-
     array
     array_append
     array_compact
@@ -378,40 +354,43 @@ Array Functions
     array_remove
     array_repeat
     array_size
+    array_sort
     array_union
     arrays_overlap
     arrays_zip
-    flatten
-    get
-    sequence
-    shuffle
-    slice
-    sort_array
-
-
-Struct Functions
-----------------
-.. autosummary::
-    :toctree: api/
-
-    named_struct
-    struct
-
-
-Map Functions
--------------
-.. autosummary::
-    :toctree: api/
-
+    cardinality
+    concat
     create_map
+    element_at
+    exists
+    filter
+    flatten
+    forall
+    get
     map_concat
     map_contains_key
     map_entries
+    map_filter
     map_from_arrays
     map_from_entries
     map_keys
     map_values
+    map_zip_with
+    named_struct
+    reduce
+    reverse
+    sequence
+    shuffle
+    size
+    slice
+    sort_array
     str_to_map
+    struct
+    transform
+    transform_keys
+    transform_values
+    try_element_at
+    zip_with
 
 
 Aggregate Functions
