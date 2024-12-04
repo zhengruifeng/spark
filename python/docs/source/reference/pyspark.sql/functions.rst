@@ -333,7 +333,7 @@ Hash Functions
 
 
 Array, Map and Struct Functions
---------------------
+-------------------------------
 .. autosummary::
     :toctree: api/
 
