@@ -2272,10 +2272,8 @@ class SparkConnectPlanner(
   private def transformTypedReduceExpression(
       fun: proto.Expression.UnresolvedFunction,
       dataAttributes: Seq[Attribute]): Expression = {
-    checkPlan(fun.getFunctionName == "reduce")
-    if (fun.getArgumentsCount != 1) {
-      throw InvalidPlanInput("reduce requires single child expression")
-    }
+    checkPlan(fun.getFunctionName == "reduce", "Function name should be reduce")
+    checkPlan(fun.getArgumentsCount == 1, "reduce requires single child expression")
     val udf = fun.getArgumentsList.asScala match {
       case collection.Seq(e)
           if e.hasCommonInlineUserDefinedFunction &&
