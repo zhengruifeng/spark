@@ -557,7 +557,7 @@ class SparkConnectPlanner(
 
   private def transformToSchema(rel: proto.ToSchema): LogicalPlan = {
     val schema = transformDataType(rel.getSchema)
-    checkPlan(schema.isInstanceOf[StructType], "Schema must be a StructType")
+    assertPlan(schema.isInstanceOf[StructType], "Schema must be a StructType")
 
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
@@ -875,7 +875,7 @@ class SparkConnectPlanner(
         logicalPlan: LogicalPlan,
         groupingExprs: java.util.List[proto.Expression],
         sortOrder: Seq[SortOrder]): UntypedKeyValueGroupedDataset = {
-      checkPlan(groupingExprs.size() >= 1, "The grouping expression cannot be absent")
+      assertPlan(groupingExprs.size() >= 1, "The grouping expression cannot be absent")
       val dummyFunc = TypedScalaUdf(groupingExprs.get(0), None)
       val groupExprs = groupingExprs.asScala.toSeq.drop(1).map(expr => transformExpression(expr))
 
@@ -895,7 +895,8 @@ class SparkConnectPlanner(
         logicalPlan: LogicalPlan,
         groupingExprs: java.util.List[proto.Expression],
         sortOrder: Seq[SortOrder]): UntypedKeyValueGroupedDataset = {
-      checkPlan(groupingExprs.size() == 1,
+      assertPlan(
+        groupingExprs.size() == 1,
         "GroupByKeyFunc should have exactly one grouping expression")
       val groupFunc = TypedScalaUdf(groupingExprs.get(0), Some(logicalPlan.output))
       val vEnc = groupFunc.inEnc
@@ -952,7 +953,7 @@ class SparkConnectPlanner(
       // Most typed API takes one UDF input.
       // For the few that takes more than one inputs, e.g. grouping function mapping UDFs,
       // the first input which is the key of the grouping function.
-      checkPlan(udf.inputEncoders.nonEmpty, "No input encoders found for the UDF")
+      assertPlan(udf.inputEncoders.nonEmpty, "No input encoders found for the UDF")
       val inEnc = udf.inputEncoders.head // single input encoder or key encoder
       TypedScalaUdf(udf.function, udf.outputEncoder, inEnc, inputAttrs)
     }
@@ -1431,7 +1432,7 @@ class SparkConnectPlanner(
   }
 
   private def transformFilter(rel: proto.Filter): LogicalPlan = {
-    checkPlan(rel.hasInput, "Filter needs a plan input")
+    assertPlan(rel.hasInput, "Filter needs a plan input")
     val baseRel = transformRelation(rel.getInput)
     val cond = rel.getCondition
     if (isTypedScalaUdfExpr(cond)) {
@@ -1752,7 +1753,7 @@ class SparkConnectPlanner(
     val udf = fun.getScalarScalaUdf
     val udfPacket = unpackUdf(fun)
     if (udf.getAggregate) {
-      checkPlan(udfPacket.inputEncoders.size == 1, "UDAF should have exactly one input encoder")
+      assertPlan(udfPacket.inputEncoders.size == 1, "UDAF should have exactly one input encoder")
       UserDefinedAggregator(
         aggregator = udfPacket.function.asInstanceOf[Aggregator[Any, Any, Any]],
         inputEncoder = ExpressionEncoder(udfPacket.inputEncoders.head),
@@ -2070,7 +2071,7 @@ class SparkConnectPlanner(
   }
 
   private def transformJoin(rel: proto.Join): LogicalPlan = {
-    checkPlan(rel.hasLeft && rel.hasRight, "Both join sides must be present")
+    assertPlan(rel.hasLeft && rel.hasRight, "Both join sides must be present")
     if (rel.hasJoinCondition && rel.getUsingColumnsCount > 0) {
       throw InvalidPlanInput(
         s"Using columns or join conditions cannot be set at the same time in Join")
@@ -2142,7 +2143,7 @@ class SparkConnectPlanner(
   }
 
   private def transformSort(sort: proto.Sort): LogicalPlan = {
-    checkPlan(sort.getOrderCount > 0, "'order' must be present and contain elements.")
+    assertPlan(sort.getOrderCount > 0, "'order' must be present and contain elements.")
     logical.Sort(
       child = transformRelation(sort.getInput),
       global = sort.getIsGlobal,
@@ -2272,8 +2273,8 @@ class SparkConnectPlanner(
   private def transformTypedReduceExpression(
       fun: proto.Expression.UnresolvedFunction,
       dataAttributes: Seq[Attribute]): Expression = {
-    checkPlan(fun.getFunctionName == "reduce", "Function name should be reduce")
-    checkPlan(fun.getArgumentsCount == 1, "reduce requires single child expression")
+    assertPlan(fun.getFunctionName == "reduce", "Function name should be reduce")
+    assertPlan(fun.getArgumentsCount == 1, "reduce requires single child expression")
     val udf = fun.getArgumentsList.asScala match {
       case collection.Seq(e)
           if e.hasCommonInlineUserDefinedFunction &&
@@ -2303,10 +2304,10 @@ class SparkConnectPlanner(
       expr: proto.TypedAggregateExpression,
       baseRelationOpt: Option[LogicalPlan]): AggregateExpression = {
     val udf = expr.getScalarScalaUdf
-    checkPlan(udf.getAggregate, "UDAF should have aggregate set to true")
+    assertPlan(udf.getAggregate, "UDAF should have aggregate set to true")
 
     val udfPacket = unpackScalaUDF[UdfPacket](udf)
-    checkPlan(udfPacket.inputEncoders.size == 1, "UDAF should have exactly one input encoder")
+    assertPlan(udfPacket.inputEncoders.size == 1, "UDAF should have exactly one input encoder")
 
     val aggregator = udfPacket.function.asInstanceOf[Aggregator[Any, Any, Any]]
     val tae =
@@ -2339,17 +2340,17 @@ class SparkConnectPlanner(
     }.toSeq
     action.getActionType match {
       case proto.MergeAction.ActionType.ACTION_TYPE_DELETE =>
-        checkPlan(assignments.isEmpty, "Delete action should not have assignment.")
+        assertPlan(assignments.isEmpty, "Delete action should not have assignment.")
         DeleteAction(condition)
       case proto.MergeAction.ActionType.ACTION_TYPE_INSERT =>
         InsertAction(condition, assignments)
       case proto.MergeAction.ActionType.ACTION_TYPE_INSERT_STAR =>
-        checkPlan(assignments.isEmpty, "InsertStar action should not have assignment.")
+        assertPlan(assignments.isEmpty, "InsertStar action should not have assignment.")
         InsertStarAction(condition)
       case proto.MergeAction.ActionType.ACTION_TYPE_UPDATE =>
         UpdateAction(condition, assignments)
       case proto.MergeAction.ActionType.ACTION_TYPE_UPDATE_STAR =>
-        checkPlan(assignments.isEmpty, "UpdateStar action should not have assignment.")
+        assertPlan(assignments.isEmpty, "UpdateStar action should not have assignment.")
         UpdateStarAction(condition)
       case _ =>
         throw InvalidPlanInput(s"Unsupported merge action type ${action.getActionType}.")
@@ -3561,7 +3562,7 @@ class SparkConnectPlanner(
       getCreateExternalTable: proto.CreateExternalTable): LogicalPlan = {
     val schema = if (getCreateExternalTable.hasSchema) {
       val struct = transformDataType(getCreateExternalTable.getSchema)
-      checkPlan(struct.isInstanceOf[StructType], "Schema must be a StructType")
+      assertPlan(struct.isInstanceOf[StructType], "Schema must be a StructType")
       struct.asInstanceOf[StructType]
     } else {
       new StructType
@@ -3591,7 +3592,7 @@ class SparkConnectPlanner(
   private def transformCreateTable(getCreateTable: proto.CreateTable): LogicalPlan = {
     val schema = if (getCreateTable.hasSchema) {
       val struct = transformDataType(getCreateTable.getSchema)
-      checkPlan(struct.isInstanceOf[StructType], "Schema must be a StructType")
+      assertPlan(struct.isInstanceOf[StructType], "Schema must be a StructType")
       struct.asInstanceOf[StructType]
     } else {
       new StructType
@@ -3704,7 +3705,7 @@ class SparkConnectPlanner(
     }
   }
 
-  private def checkPlan(assertion: Boolean, message: String): Unit = {
+  private def assertPlan(assertion: Boolean, message: String): Unit = {
     if (!assertion) throw InvalidPlanInput(message)
   }
 }
