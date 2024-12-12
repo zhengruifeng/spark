@@ -1907,15 +1907,19 @@ def _parse_datatype_string(s: str) -> DataType:
     if is_remote():
         from pyspark.sql.connect.session import SparkSession
 
+        session = SparkSession.getActiveSession()
+        assert session is not None
+
         return cast(
             DataType,
-            SparkSession.active()._client._analyze(method="ddl_parse", ddl_string=s).parsed,
+            session._client._analyze(method="ddl_parse", ddl_string=s).parsed,
         )
 
     else:
         from py4j.java_gateway import JVMView
 
         sc = get_active_spark_context()
+        assert sc._jvm is not None
 
         def from_ddl_schema(type_str: str) -> DataType:
             return _parse_datatype_json_string(
