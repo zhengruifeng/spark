@@ -95,7 +95,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * All Attributes that appear in expressions from this operator.  Note that this set does not
    * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
-  def references: AttributeSet = _references()
+  def references: AttributeSet = AttributeSet(expressions) -- producedAttributes
 
   private val _references = new TransientLazy({
     AttributeSet(expressions) -- producedAttributes
