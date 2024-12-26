@@ -26,7 +26,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{get => fget, _}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -263,19 +263,14 @@ class ImputerModel private[ml] (
   /** @group setParam */
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-  @transient private lazy val surrogates = {
-    val row = surrogateDF.head()
-    row.schema.fieldNames.zipWithIndex
-      .map { case (name, index) => (name, row.getDouble(index)) }
-      .toMap
-  }
-
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val (inputColumns, outputColumns) = getInOutCols()
 
+    val surrogateColName = s"__imputer_surrogate_${this.uid}__"
     val newCols = inputColumns.map { inputCol =>
-      val surrogate = surrogates(inputCol)
+      val index = surrogateDF.columns.indexOf(inputCol)
+      val surrogate = fget(col(surrogateColName), lit(index))
       val inputType = SchemaUtils.getSchemaFieldType(dataset.schema, inputCol)
       val ic = col(inputCol).cast(DoubleType)
       when(ic.isNull, surrogate)
@@ -283,7 +278,10 @@ class ImputerModel private[ml] (
         .otherwise(ic)
         .cast(inputType)
     }
-    dataset.withColumns(outputColumns.toImmutableArraySeq, newCols.toImmutableArraySeq).toDF()
+    dataset.withColumn(surrogateColName, surrogateDF.select(array(col("*"))).scalar())
+      .withColumns(outputColumns.toImmutableArraySeq, newCols.toImmutableArraySeq)
+      .drop(surrogateColName)
+      .toDF()
   }
 
   override def transformSchema(schema: StructType): StructType = {
