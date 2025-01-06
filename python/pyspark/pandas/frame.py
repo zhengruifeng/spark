@@ -9885,6 +9885,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     for percentile in percentiles
                 ]
             )
+            a = 3
             max_exprs = map(F.max, column_names)
             mean_exprs = []
             for column_name, spark_data_type in zip(column_names, spark_data_types):
