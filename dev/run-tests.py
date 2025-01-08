@@ -395,7 +395,7 @@ def run_python_tests(test_modules, test_pythons, parallelism, with_coverage=Fals
 
 
 def run_python_packaging_tests():
-    if not os.environ.get("SPARK_JENKINS") and os.environ.get("SKIP_PACKAGING", "false") != "true":
+    if not os.environ.get("SPARK_JENKINS"):
         set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
         command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
         run_cmd(command)
@@ -664,7 +664,8 @@ def main():
             opts.parallelism,
             with_coverage=os.environ.get("PYSPARK_CODECOV", "false") == "true",
         )
-        run_python_packaging_tests()
+        if any(m.name == "pyspark-packaging" for m in modules_with_python_tests):
+            run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules) and not os.environ.get("SKIP_R"):
         run_sparkr_tests()
 

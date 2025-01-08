@@ -37,7 +37,7 @@ def determine_modules_for_files(filenames):
     and `README.md` is always ignored.
 
     >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
-    ['pyspark-core', 'pyspark-errors', 'sql']
+    ['pyspark-core', 'pyspark-packaging', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
     >>> [x.name for x in determine_modules_for_files(["sql/README.md"])]
