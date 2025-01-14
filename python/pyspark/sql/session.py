@@ -1493,6 +1493,8 @@ class SparkSession(SparkConversionMixin):
         |  1|  2|
         +---+---+
         """
+        from pyspark.testing.utils import have_numpy, have_pandas, have_pyarrow
+
         SparkSession._activeSession = self
         assert self._jvm is not None
         self._jvm.SparkSession.setActiveSession(self._jsparkSession)
@@ -1508,28 +1510,16 @@ class SparkSession(SparkConversionMixin):
             # Must re-encode any unicode strings to be consistent with StructField names
             schema = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
 
-        try:
-            import pandas as pd
-
-            has_pandas = True
-        except Exception:
-            has_pandas = False
-
-        try:
+        if have_numpy:
             import numpy as np
 
-            has_numpy = True
-        except Exception:
-            has_numpy = False
+        if have_pandas:
+            import pandas as pd
 
-        try:
+        if have_pyarrow:
             import pyarrow as pa
 
-            has_pyarrow = True
-        except Exception:
-            has_pyarrow = False
-
-        if has_numpy and isinstance(data, np.ndarray):
+        if have_numpy and isinstance(data, np.ndarray):
             # `data` of numpy.ndarray type will be converted to a pandas DataFrame,
             # so pandas is required.
             from pyspark.sql.pandas.utils import require_minimum_pandas_version
@@ -1557,12 +1547,12 @@ class SparkSession(SparkConversionMixin):
 
             data = pd.DataFrame(data, columns=column_names)
 
-        if has_pandas and isinstance(data, pd.DataFrame):
+        if have_pandas and isinstance(data, pd.DataFrame):
             # Create a DataFrame from pandas DataFrame.
             return super(SparkSession, self).createDataFrame(  # type: ignore[call-overload]
                 data, schema, samplingRatio, verifySchema
             )
-        if has_pyarrow and isinstance(data, pa.Table):
+        if have_pyarrow and isinstance(data, pa.Table):
             # Create a DataFrame from PyArrow Table.
             return super(SparkSession, self).createDataFrame(  # type: ignore[call-overload]
                 data, schema, samplingRatio, verifySchema
