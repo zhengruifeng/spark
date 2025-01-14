@@ -68,6 +68,7 @@ from pyspark.sql.utils import (
     remote_only,
 )
 from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
+from pyspark.testing.utils import have_numpy, have_pandas, have_pyarrow
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -1493,7 +1494,6 @@ class SparkSession(SparkConversionMixin):
         |  1|  2|
         +---+---+
         """
-        from pyspark.testing.utils import have_numpy, have_pandas, have_pyarrow
 
         SparkSession._activeSession = self
         assert self._jvm is not None
