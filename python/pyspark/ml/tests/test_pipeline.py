@@ -86,6 +86,11 @@ class PipelineTestsMixin:
 
         # Pipeline save & load
         with tempfile.TemporaryDirectory(prefix="classification_pipeline") as d:
+            # Path is not empty!
+            assembler.write().overwrite().save(d)
+            with self.assertRaisesRegex(Exception, "PATH_ALREADY_EXISTS"):
+                pipeline.write().save(d)
+
             pipeline.write().overwrite().save(d)
             pipeline2 = Pipeline.load(d)
             self.assertEqual(str(pipeline), str(pipeline2))
@@ -116,6 +121,12 @@ class PipelineTestsMixin:
 
         # PipelineModel save & load
         with tempfile.TemporaryDirectory(prefix="classification_pipeline_model") as d:
+            # Path is not empty!
+            assembler.write().overwrite().save(d)
+            with self.assertRaisesRegex(Exception, "PATH_ALREADY_EXISTS"):
+                model.write().save(d)
+
+            # Successfully save with overwrite
             model.write().overwrite().save(d)
             model2 = PipelineModel.load(d)
             self.assertEqual(str(model), str(model2))
@@ -136,6 +147,11 @@ class PipelineTestsMixin:
 
         # Pipeline save & load
         with tempfile.TemporaryDirectory(prefix="clustering_pipeline") as d:
+            # Path is not empty!
+            # assembler.write().overwrite().save(d)
+            # with self.assertRaisesRegex(Exception, "PATH_ALREADY_EXISTS"):
+            #     pipeline.write().save(d)
+
             pipeline.write().overwrite().save(d)
             pipeline2 = Pipeline.load(d)
             self.assertEqual(str(pipeline), str(pipeline2))
@@ -164,6 +180,11 @@ class PipelineTestsMixin:
 
         # PipelineModel save & load
         with tempfile.TemporaryDirectory(prefix="clustering_pipeline_model") as d:
+            # Path is not empty!
+            # assembler.write().overwrite().save(d)
+            # with self.assertRaisesRegex(Exception, "PATH_ALREADY_EXISTS"):
+            #     model.write().save(d)
+
             model.write().overwrite().save(d)
             model2 = PipelineModel.load(d)
             self.assertEqual(str(model), str(model2))

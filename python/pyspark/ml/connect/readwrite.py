@@ -109,12 +109,9 @@ class RemoteMLWriter(MLWriter):
             from pyspark.ml.pipeline import PipelineSharedReadWrite
 
             if shouldOverwrite:
-                # mimic MLWriter._handleOverwrite
                 # We cannot call 'org.apache.spark.ml.util.FileSystemOverwrite' in connect,
                 # so overwrite the path with an empty text file.
-                session.range(0, numPartitions=1).selectExpr(
-                    "'' AS _pipeline_overwrite"
-                ).write.mode("overwrite").text(path)
+                RemoteMLWriter.cleanPath(path, session)
 
             if isinstance(instance, Pipeline):
                 stages = instance.getStages()  # type: ignore[attr-defined]
@@ -131,6 +128,23 @@ class RemoteMLWriter(MLWriter):
 
         else:
             raise NotImplementedError(f"Unsupported write for {instance.__class__}")
+
+    @staticmethod
+    def cleanPath(path: str, session: "SparkSession") -> None:
+        writer = pb2.MlCommand.Write(
+            operator=pb2.MlOperator(
+                name="org.apache.spark.ml.util.PathCleaner",
+                uid="_path_cleaner_",
+                type=pb2.MlOperator.TRANSFORMER,
+            ),
+            params={},
+            path=path,
+            should_overwrite=True,
+            options={},
+        )
+        command = pb2.Command()
+        command.ml_command.write.CopyFrom(writer)
+        session.client.execute_command(command)
 
 
 class RemoteMLReader(MLReader[RL]):
