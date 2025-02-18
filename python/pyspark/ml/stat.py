@@ -547,6 +547,9 @@ class MultivariateGaussian:
     >>> from pyspark.ml.linalg import DenseMatrix, Vectors
     >>> from pyspark.ml.stat import MultivariateGaussian
     >>> m = MultivariateGaussian(Vectors.dense([11,12]), DenseMatrix(2, 2, (1.0, 3.0, 5.0, 2.0)))
+    >>> m
+    MultivariateGaussian(mean=[11.0,12.0], cov=DenseMatrix([[1., 5.],
+                 [3., 2.]]))
     >>> (m.mean, m.cov.toArray())
     (DenseVector([11.0, 12.0]), array([[ 1.,  5.],
            [ 3.,  2.]]))
@@ -555,6 +558,9 @@ class MultivariateGaussian:
     def __init__(self, mean: Vector, cov: Matrix):
         self.mean = mean
         self.cov = cov
+
+    def __repr__(self) -> str:
+        return f"MultivariateGaussian(mean={self.mean}, cov={self.cov})"
 
 
 if __name__ == "__main__":

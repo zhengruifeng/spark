@@ -130,4 +130,6 @@ class MultivariateGaussian @Since("2.0.0") (
         throw new IllegalArgumentException("Covariance matrix has no non-zero singular values")
     }
   }
+
+  override def toString: String = s"MultivariateGaussian(mean=$mean, cov=$cov)"
 }
