@@ -39,6 +39,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Common params for GaussianMixture and GaussianMixtureModel
@@ -219,6 +220,9 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   override def summary: GaussianMixtureSummary = super.summary
 
+  private[spark] override def estimatedSize: Long = {
+    SizeEstimator.estimate((this.params, this.uid, this.weights, this.gaussians))
+  }
 }
 
 @Since("2.0.0")
@@ -551,6 +555,13 @@ class GaussianMixture @Since("2.0.0") (
       (mean, cov)
     }
     (weights, gaussians)
+  }
+
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = getNumFeatures(dataset, $(featuresCol))
+    SizeEstimator.estimate((this.params, this.uid)) +
+      (8 + Vectors.getDenseSize(numFeatures) +
+        Matrices.getDenseSize(numFeatures, numFeatures)) * $(k) + 24
   }
 }
 

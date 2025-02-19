@@ -81,4 +81,6 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
   }
 
   override def copy(extra: ParamMap): Estimator[M]
+
+  private[spark] def estimateModelSize(dataset: Dataset[_]): Long = throw new NotImplementedError
 }

@@ -40,6 +40,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
@@ -210,6 +211,10 @@ class KMeansModel private[ml] (
    */
   @Since("2.0.0")
   override def summary: KMeansSummary = super.summary
+
+  private[spark] override def estimatedSize: Long = {
+    SizeEstimator.estimate((this.params, this.uid, this.parentModel))
+  }
 }
 
 /** Helper class for storing model data */
@@ -607,6 +612,13 @@ class KMeans @Since("1.5.0") (
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
+  }
+
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+    SizeEstimator.estimate((this.params, this.uid)) +
+      Vectors.getDenseSize(numFeatures) * $(k) +
+      SizeEstimator.estimate($(distanceMeasure)) + 24
   }
 }
 

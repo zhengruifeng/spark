@@ -49,9 +49,9 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{monotonically_increasing_id, udf}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.{PeriodicCheckpointer, SizeEstimator, VersionUtils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.PeriodicCheckpointer
-import org.apache.spark.util.VersionUtils
+
 
 private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasMaxIter
   with HasSeed with HasCheckpointInterval {
@@ -640,6 +640,10 @@ class LocalLDAModel private[ml] (
   override def toString: String = {
     s"LocalLDAModel: uid=$uid, k=${$(k)}, numFeatures=$vocabSize"
   }
+
+  private[spark] override def estimatedSize: Long = {
+    SizeEstimator.estimate((this.params, this.uid, this.vocabSize, this.oldLocalModel))
+  }
 }
 
 
@@ -804,6 +808,12 @@ class DistributedLDAModel private[ml] (
   @Since("3.0.0")
   override def toString: String = {
     s"DistributedLDAModel: uid=$uid, k=${$(k)}, numFeatures=$vocabSize"
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    // The main part of the model is a Graph, which is distributed and thus not counted here.
+    SizeEstimator.estimate((this.params, this.uid,
+      this.vocabSize, this.oldLocalModelOption))
   }
 }
 
@@ -993,6 +1003,13 @@ class LDA @Since("1.6.0") (
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
+  }
+
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+    SizeEstimator.estimate((this.params, this.uid)) +
+      Matrices.getDenseSize(numFeatures, $(k)) +
+      Vectors.getDenseSize(numFeatures) + 16
   }
 }
 

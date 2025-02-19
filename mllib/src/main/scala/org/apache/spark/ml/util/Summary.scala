@@ -18,6 +18,7 @@
 package org.apache.spark.ml.util
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.util.KnownSizeEstimation
 
 /**
  * Trait for the Summary
@@ -25,4 +26,7 @@ import org.apache.spark.annotation.Since
  * support connect.
  */
 @Since("4.0.0")
-private[spark] trait Summary
+private[spark] trait Summary extends KnownSizeEstimation {
+
+  override def estimatedSize: Long = 256 * 1024
+}

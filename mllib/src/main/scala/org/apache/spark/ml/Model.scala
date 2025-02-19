@@ -18,6 +18,7 @@
 package org.apache.spark.ml
 
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.util.SizeEstimator
 
 /**
  * A fitted model, i.e., a [[Transformer]] produced by an [[Estimator]].
@@ -43,4 +44,6 @@ abstract class Model[M <: Model[M]] extends Transformer {
   def hasParent: Boolean = parent != null
 
   override def copy(extra: ParamMap): M
+
+  private[spark] def estimatedSize: Long = SizeEstimator.estimate(this)
 }
