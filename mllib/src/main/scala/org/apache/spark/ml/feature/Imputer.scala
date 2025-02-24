@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.util.UUID
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -26,7 +28,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{functions => sf}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -158,9 +160,9 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
 
     val transformedColNames = Array.tabulate(inputColumns.length)(index => s"c_$index")
     val cols = inputColumns.zip(transformedColNames).map { case (inputCol, transformedColName) =>
-      when(col(inputCol).equalTo($(missingValue)), null)
-        .when(col(inputCol).isNaN, null)
-        .otherwise(col(inputCol))
+      sf.when(sf.col(inputCol).equalTo($(missingValue)), null)
+        .when(sf.col(inputCol).isNaN, null)
+        .otherwise(sf.col(inputCol))
         .cast(DoubleType)
         .as(transformedColName)
     }
@@ -171,7 +173,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
       case Imputer.mean =>
         // Function avg will ignore null automatically.
         // For a column only containing null, avg will return null.
-        val row = dataset.select(cols.map(avg).toImmutableArraySeq: _*).head()
+        val row = dataset.select(cols.map(sf.avg).toImmutableArraySeq: _*).head()
         Array.tabulate(numCols)(i => if (row.isNullAt(i)) Double.NaN else row.getDouble(i))
 
       case Imputer.median =>
@@ -190,8 +192,8 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
           Iterator.range(0, numCols)
             .flatMap(i => if (row.isNullAt(i)) None else Some((i, row.getDouble(i))))
         }.toDF("index", "value")
-         .groupBy("index", "value").agg(negate(count(lit(0))).as("negative_count"))
-         .groupBy("index").agg(min(struct("negative_count", "value")).as("mode"))
+         .groupBy("index", "value").agg(sf.negate(sf.count(sf.lit(0))).as("negative_count"))
+         .groupBy("index").agg(sf.min(sf.struct("negative_count", "value")).as("mode"))
          .select("index", "mode.value")
          .as[(Int, Double)].collect().toMap
         Array.tabulate(numCols)(i => modes.getOrElse(i, Double.NaN))
@@ -263,27 +265,34 @@ class ImputerModel private[ml] (
   /** @group setParam */
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-  @transient private lazy val surrogates = {
-    val row = surrogateDF.head()
-    row.schema.fieldNames.zipWithIndex
-      .map { case (name, index) => (name, row.getDouble(index)) }
-      .toMap
-  }
-
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val (inputColumns, outputColumns) = getInOutCols()
 
+    val tmpModelColName = s"_tmp_imputer_model_${this.uid}_${UUID.randomUUID().toString}_"
+    val tmpJoinLeftColName = s"_tmp_imputer_join_left_${this.uid}_${UUID.randomUUID().toString}_"
+    val tmpJoinRightColName = s"_tmp_imputer_join_right_${this.uid}_${UUID.randomUUID().toString}_"
+
     val newCols = inputColumns.map { inputCol =>
-      val surrogate = surrogates(inputCol)
       val inputType = SchemaUtils.getSchemaFieldType(dataset.schema, inputCol)
-      val ic = col(inputCol).cast(DoubleType)
-      when(ic.isNull, surrogate)
-        .when(ic === $(missingValue), surrogate)
+      val ic = sf.col(inputCol).cast(DoubleType)
+      val surrogateCol = sf.col(tmpModelColName).getField(inputCol).cast(DoubleType)
+      sf.when(ic.isNull, surrogateCol)
+        .when(ic === $(missingValue), surrogateCol)
         .otherwise(ic)
         .cast(inputType)
     }
-    dataset.withColumns(outputColumns.toImmutableArraySeq, newCols.toImmutableArraySeq).toDF()
+
+    val modelDF = surrogateDF.select(
+      sf.first(sf.struct("*")).as(tmpModelColName),
+      sf.lit(0).as(tmpJoinRightColName)
+    )
+
+    dataset.select(sf.col("*"), sf.lit(0).as(tmpJoinLeftColName))
+      .join(modelDF, sf.col(tmpJoinLeftColName) === sf.col(tmpJoinRightColName))
+      .withColumns(outputColumns.toImmutableArraySeq, newCols.toImmutableArraySeq)
+      .drop(tmpModelColName, tmpJoinLeftColName, tmpJoinRightColName)
+      .toDF()
   }
 
   override def transformSchema(schema: StructType): StructType = {
