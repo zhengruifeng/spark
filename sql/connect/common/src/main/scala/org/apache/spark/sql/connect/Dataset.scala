@@ -451,7 +451,13 @@ class Dataset[T] private[sql] (
     }
 
   /** @inheritdoc */
-  def col(colName: String): Column = new Column(colName, getPlanId)
+  def col(colName: String): Column = {
+    if (colName != "*" && !this.columns.contains(colName)) {
+      // The colName might be nested, e.g. a.b.c, then validate it in the server side
+      this.select(colName).isLocal
+    }
+    new Column(colName, getPlanId)
+  }
 
   /** @inheritdoc */
   def metadataColumn(colName: String): Column = {
