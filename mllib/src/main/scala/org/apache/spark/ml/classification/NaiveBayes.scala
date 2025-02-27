@@ -484,7 +484,7 @@ class NaiveBayesModel private[ml] (
     Vectors.dense(prob)
   }
 
-  @transient private lazy val predictRawFunc = {
+  private def getPredictRawFunc: Vector => Vector = {
     $(modelType) match {
       case Multinomial =>
         features: Vector => multinomialCalculation(features)
@@ -502,6 +502,19 @@ class NaiveBayesModel private[ml] (
           Iterator.range(0, numFeatures).map { j => math.log(sigma(i, j)) }.sum
         }
         features: Vector => gaussianCalculation(features, logVarSum)
+    }
+  }
+
+  @transient private var cache = new java.lang.ref.SoftReference[Vector => Vector](null)
+
+  private def predictRawFunc: Vector => Vector = {
+    val cached = cache.get()
+    if (cached != null) {
+      cached
+    } else {
+      val f = getPredictRawFunc
+      cache = new java.lang.ref.SoftReference(f)
+      f
     }
   }
 
