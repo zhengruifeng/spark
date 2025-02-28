@@ -29,7 +29,6 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.{OpenHashMap, Utils}
 
@@ -188,59 +187,47 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       require($(maxDF) >= $(minDF), "maxDF must be >= minDF.")
     }
 
-    val vocSize = $(vocabSize)
-    val input = dataset.select($(inputCol)).rdd.map(_.getSeq[String](0))
-    val countingRequired = $(minDF) < 1.0 || $(maxDF) < 1.0
-    val maybeInputSize = if (countingRequired) {
-      if (dataset.storageLevel == StorageLevel.NONE) {
-        input.persist(StorageLevel.MEMORY_AND_DISK)
+    val spark = dataset.sparkSession
+    import spark.implicits._
+
+    val results = if (isSet(minDF) || isSet(maxDF)) {
+      // need to compute document frequency to filter out results
+      val docs = dataset.select(col($(inputCol)).as("doc"))
+
+      val multiplier = if ($(minDF) < 1.0 || $(maxDF) < 1.0) {
+        docs.select(count(lit(0))).scalar()
+      } else {
+        lit(1L)
       }
-      Some(input.count())
+
+      val minDFCol = if ($(minDF) >= 1.0) lit($(minDF)) else col("multiplier") * lit($(minDF))
+      val maxDFCol = if ($(maxDF) >= 1.0) lit($(maxDF)) else col("multiplier") * lit($(minDF))
+
+      // add doc_id to correctly handle duplicated documents
+      // multiplier is a constant long value, won't affect the aggregations
+      docs.withColumn("multiplier", multiplier)
+        .withColumn("doc_id", monotonically_increasing_id())
+        .withColumn("word", explode(col("doc")))
+        .groupBy("word", "doc_id", "multiplier")
+        .agg(count(lit(0)).as("partial_word_count"))
+        .groupBy("word", "multiplier")
+        .agg(
+          sum(col("partial_word_count")).as("word_count"),
+          count(lit(0)).as("doc_freq"))
+        .where(col("doc_freq").between(minDFCol, maxDFCol))
+        .select("word", "word_count")
     } else {
-      None
-    }
-    val minDf = if ($(minDF) >= 1.0) {
-      $(minDF)
-    } else {
-      $(minDF) * maybeInputSize.get
-    }
-    val maxDf = if ($(maxDF) >= 1.0) {
-      $(maxDF)
-    } else {
-      $(maxDF) * maybeInputSize.get
-    }
-    require(maxDf >= minDf, "maxDF must be >= minDF.")
-    val allWordCounts = input.flatMap { tokens =>
-      val wc = new OpenHashMap[String, Long]
-      tokens.foreach { w =>
-        wc.changeValue(w, 1L, _ + 1L)
-      }
-      wc.map { case (word, count) => (word, (count, 1)) }
-    }.reduceByKey { (wcdf1, wcdf2) =>
-      (wcdf1._1 + wcdf2._1, wcdf1._2 + wcdf2._2)
+      dataset.select(explode(col($(inputCol))).as("word"))
+        .groupBy("word")
+        .agg(count(lit(0)).as("word_count"))
     }
 
-    val filteringRequired = isSet(minDF) || isSet(maxDF)
-    val maybeFilteredWordCounts = if (filteringRequired) {
-      allWordCounts.filter { case (_, (_, df)) => df >= minDf && df <= maxDf }
-    } else {
-      allWordCounts
-    }
-
-    val wordCounts = maybeFilteredWordCounts
-      .map { case (word, (count, _)) => (word, count) }
-      .persist(StorageLevel.MEMORY_AND_DISK)
-
-    val fullVocabSize = wordCounts.count()
-
-    val vocab = wordCounts
-      .top(math.min(fullVocabSize, vocSize).toInt)(Ordering.by(_._2))
-      .map(_._1)
-
-    if (input.getStorageLevel != StorageLevel.NONE) {
-      input.unpersist()
-    }
-    wordCounts.unpersist()
+    val vocab = results
+      .sort(col("word_count").desc)
+      .select("word")
+      .limit($(vocabSize))
+      .as[String]
+      .collect()
 
     if (vocab.isEmpty) {
       this.logWarning("The vocabulary size is empty. " +
