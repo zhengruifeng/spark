@@ -201,7 +201,7 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       }
 
       val minDFCol = if ($(minDF) >= 1.0) lit($(minDF)) else col("multiplier") * lit($(minDF))
-      val maxDFCol = if ($(maxDF) >= 1.0) lit($(maxDF)) else col("multiplier") * lit($(minDF))
+      val maxDFCol = if ($(maxDF) >= 1.0) lit($(maxDF)) else col("multiplier") * lit($(maxDF))
 
       // add doc_id to correctly handle duplicated documents
       // multiplier is a constant long value, won't affect the aggregations
@@ -223,7 +223,7 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     }
 
     val vocab = results
-      .sort(col("word_count").desc)
+      .sort(col("word_count").desc, col("word").asc)
       .select("word")
       .limit($(vocabSize))
       .as[String]
