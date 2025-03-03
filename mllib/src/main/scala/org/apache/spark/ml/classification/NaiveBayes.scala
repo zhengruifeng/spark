@@ -512,17 +512,12 @@ class NaiveBayesModel private[ml] (
     if (c != null) {
       val f = c.get()
       if (f != null) {
-        f
-      } else {
-        val f = getPredictRawFunc
-        cache = new java.lang.ref.SoftReference(f)
-        f
+        return f
       }
-    } else {
-      val f = getPredictRawFunc
-      cache = new java.lang.ref.SoftReference(f)
-      f
     }
+    val f = getPredictRawFunc
+    cache = new java.lang.ref.SoftReference(f)
+    f
   }
 
   @Since("3.0.0")
