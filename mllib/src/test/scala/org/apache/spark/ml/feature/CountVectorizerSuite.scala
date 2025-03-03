@@ -126,17 +126,17 @@ class CountVectorizerSuite extends MLTest with DefaultReadWriteTest {
     ).toDF("id", "words", "expected")
 
     // maxDF: ignore terms with count more than 3
-    //    val cvModel = new CountVectorizer()
-    //      .setInputCol("words")
-    //      .setOutputCol("features")
-    //      .setMaxDF(3)
-    //      .fit(df)
-    //    assert(cvModel.vocabulary === Array("b", "c", "d"))
-    //
-    //    cvModel.transform(df).select("features", "expected").collect().foreach {
-    //      case Row(features: Vector, expected: Vector) =>
-    //        assert(features ~== expected absTol 1e-14)
-    //    }
+    val cvModel = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMaxDF(3)
+      .fit(df)
+    assert(cvModel.vocabulary === Array("b", "c", "d"))
+
+    cvModel.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
+    }
 
     // maxDF: ignore terms with freq > 0.75
     val cvModel2 = new CountVectorizer()
