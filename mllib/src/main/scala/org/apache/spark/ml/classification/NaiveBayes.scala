@@ -508,9 +508,16 @@ class NaiveBayesModel private[ml] (
   @transient private var cache = new java.lang.ref.SoftReference[Vector => Vector](null)
 
   private def predictRawFunc: Vector => Vector = {
-    val cached = cache.get()
-    if (cached != null) {
-      cached
+    val c = this.cache
+    if (c != null) {
+      val f = c.get()
+      if (f != null) {
+        f
+      } else {
+        val f = getPredictRawFunc
+        cache = new java.lang.ref.SoftReference(f)
+        f
+      }
     } else {
       val f = getPredictRawFunc
       cache = new java.lang.ref.SoftReference(f)
