@@ -1225,9 +1225,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
 }
 
 object TreeNode {
-  // names of TreeNodeTags that need to be force copied in TreeNode.copyTagsFrom
+  // Names of TreeNodeTags that need to be force copied in TreeNode.copyTagsFrom
   // plan_id: Spark Connect needs PLAN_ID_TAG to properly resolve dataframe column;
-  // is_metadata_col: Spark Connect needs IS_METADATA_COL to properly resolve meta-column.
+  // is_metadata_col: Spark Connect needs IS_METADATA_COL to properly resolve metadata column.
   private val forceCopyList = Set("plan_id", "is_metadata_col")
 }
 
