@@ -169,8 +169,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     // SPARK-32753: it only makes sense to copy tags to a new node
     // but it's too expensive to detect other cases likes node removal
     // so we make a compromise here to copy tags to node with no tags
-    if (isTagsEmpty && !other.isTagsEmpty) {
-      tags ++= other.tags
+    if (!other.isTagsEmpty) {
+      if (this.isTagsEmpty) {
+        tags ++= other.tags
+      } else {
+        other.tags.foreach { case (tag, value) =>
+          if (TreeNode.forceCopyList.contains(tag.name)) {
+            tags(tag) = value
+          }
+        }
+      }
     }
   }
 
@@ -1214,6 +1222,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     case p if p.productIterator.exists(_.isInstanceOf[TreeNode[_]]) => true
     case _ => false
   }
+}
+
+object TreeNode {
+  // names of TreeNodeTags that need to be force copied in TreeNode.copyTagsFrom
+  // plan_id: Spark Connect needs PLAN_ID_TAG to properly resolve dataframe column;
+  // is_metadata_col: Spark Connect needs IS_METADATA_COL to properly resolve meta-column.
+  private val forceCopyList = Set("plan_id", "is_metadata_col")
 }
 
 trait LeafLike[T <: TreeNode[T]] { self: TreeNode[T] =>
