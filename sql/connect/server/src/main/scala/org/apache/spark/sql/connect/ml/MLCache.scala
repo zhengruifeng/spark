@@ -23,12 +23,13 @@ import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.util.ConnectHelper
+import org.apache.spark.sql.classic.SparkSession
 
 /**
  * MLCache is for caching ML objects, typically for models and summaries evaluated by a model.
  */
-private[connect] class MLCache extends Logging {
-  private val helper = new ConnectHelper()
+private[connect] class MLCache(session: SparkSession) extends Logging {
+  private val helper = new ConnectHelper(session)
   private val helperID = "______ML_CONNECT_HELPER______"
 
   private val cachedModel: ConcurrentMap[String, Object] = CacheBuilder

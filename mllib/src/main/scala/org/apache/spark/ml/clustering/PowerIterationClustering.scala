@@ -208,7 +208,10 @@ private[spark] class PowerIterationClusteringWrapper(override val uid: String)
 
   override def write: MLWriter = new MLWriter {
     override protected def saveImpl(path: String): Unit = {
-      new PowerIterationClustering(uid).copy(paramMap).save(path)
+      // handleOverwrite in PowerIterationClusteringWrapper already created the path,
+      // here always overwrite the path
+      new PowerIterationClustering(uid).copy(paramMap)
+        .write.overwrite().save(path)
     }
   }
 }

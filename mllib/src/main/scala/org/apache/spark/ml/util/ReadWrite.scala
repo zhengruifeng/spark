@@ -39,7 +39,7 @@ import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
 import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, SparkSession, SQLContext}
 import org.apache.spark.util.{Utils, VersionUtils}
 
 /**
@@ -757,15 +757,21 @@ private[ml] object MetaAlgorithmReadWrite {
 private[spark] class FileSystemOverwrite extends Logging {
 
   def handleOverwrite(path: String, shouldOverwrite: Boolean, session: SparkSession): Unit = {
-    val hadoopConf = session.sessionState.newHadoopConf()
-    val outputPath = new Path(path)
-    val fs = outputPath.getFileSystem(hadoopConf)
-    val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    if (fs.exists(qualifiedOutputPath)) {
+    val pathExists = try {
+      session.read.format("binaryFile").load(path)
+      true
+    } catch {
+      case e: AnalysisException if e.errorClass.contains("PATH_NOT_FOUND") => false
+    }
+
+    if (pathExists) {
       if (shouldOverwrite) {
         logInfo(log"Path ${MDC(PATH, path)} already exists. It will be overwritten.")
-        // TODO: Revert back to the original content if save is not successful.
-        fs.delete(qualifiedOutputPath, true)
+        // Unfortunately, this will create two extra files in the path.
+        // 1. _SUCCESS
+        // 2. part-00000-[...].txt
+        session.range(0).selectExpr("CAST(id AS STRING) AS VALUE")
+          .write.mode("overwrite").text(path)
       } else {
         throw new IOException(s"Path $path already exists. To overwrite it, " +
           s"please use write.overwrite().save(path) for Scala and use " +
