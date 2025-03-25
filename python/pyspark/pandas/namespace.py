@@ -70,6 +70,8 @@ from pyspark.sql.types import (
     DataType,
 )
 from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
+from pyspark.sql.utils import is_timestamp_ntz_preferred
+
 from pyspark import pandas as ps
 from pyspark.pandas._typing import Axis, Dtype, Label, Name
 from pyspark.pandas.base import IndexOpsMixin
@@ -940,9 +942,9 @@ def read_excel(
     comment: Optional[str] = None,
     skipfooter: int = 0,
     **kwds: Any,
-) -> Union[DataFrame, Series, Dict[str, Union[DataFrame, Series]]]:
+) -> Union[DataFrame, Dict[str, DataFrame]]:
     """
-    Read an Excel file into a pandas-on-Spark DataFrame or Series.
+    Read an Excel file into a pandas-on-Spark DataFrame.
 
     Support both `xls` and `xlsx` file extensions from a local filesystem or URL.
     Support an option to read a single sheet or a list of sheets.
@@ -1134,8 +1136,8 @@ def read_excel(
     def pd_read_excel(
         io_or_bin: Any,
         sn: Union[str, int, List[Union[str, int]], None],
-        nr: Optional[int] = None,
-    ) -> pd.DataFrame:
+        nr: Optional[int],
+    ) -> Union[pd.DataFrame, Dict[str, pd.DataFrame]]:
         return pd.read_excel(
             io=BytesIO(io_or_bin) if isinstance(io_or_bin, (bytes, bytearray)) else io_or_bin,
             sheet_name=sn,
@@ -1163,54 +1165,62 @@ def read_excel(
 
     if not isinstance(io, str):
         # When io is not a path, always need to load all data to python side
-        pdf_or_psers = pd_read_excel(io, sn=sheet_name, nr=nrows)
-        if isinstance(pdf_or_psers, dict):
-            return {
-                sn: cast(Union[DataFrame, Series], from_pandas(pdf_or_pser))
-                for sn, pdf_or_pser in pdf_or_psers.items()
-            }
+        pdf_or_dict = pd_read_excel(io, sn=sheet_name, nr=nrows)
+        if isinstance(pdf_or_dict, dict):
+            return {sn: cast(DataFrame, from_pandas(pdf)) for sn, pdf in pdf_or_dict.items()}
         else:
-            return cast(Union[DataFrame, Series], from_pandas(pdf_or_psers))
+            return cast(DataFrame, from_pandas(pdf_or_dict))
 
     spark = default_session()
+    prefer_timestamp_ntz = is_timestamp_ntz_preferred()
 
     # Collect the first #nr rows from the first file
     nr = get_option("compute.max_rows", 1000)
     if nrows is not None and nrows < nr:
         nr = nrows
 
-    def sample_data(pdf: pd.DataFrame) -> pd.DataFrame:
+    def infer_metadata(pdf: pd.DataFrame) -> pd.DataFrame:
         raw_data = BytesIO(pdf.content[0])
         pdf_or_dict = pd_read_excel(raw_data, sn=sheet_name, nr=nr)
-        return pd.DataFrame({"sampled": [pickle.dumps(pdf_or_dict)]})
 
-    # 'binaryFile' format is available since Spark 3.0.0.
-    sampled = (
+        def infer(pdf: pd.DataFrame) -> Tuple[StructType, List[str], List[str]]:
+            raw_index_names = pdf.index.names
+            (
+                _,
+                index_columns,
+                index_fields,
+                data_columns,
+                data_fields,
+            ) = InternalFrame.prepare_pandas_frame(pdf, prefer_timestamp_ntz=prefer_timestamp_ntz)
+            schema = StructType([field.struct_field for field in index_fields + data_fields])
+            return schema, raw_index_names, index_columns
+
+        if isinstance(pdf_or_dict, dict):
+            inferred = pickle.dumps({sn: infer(pdf) for sn, pdf in pdf_or_dict.items()})
+        else:
+            inferred = pickle.dumps(infer(pdf_or_dict))
+        return pd.DataFrame({"inferred": [inferred]})
+
+    metadata = (
         spark.read.format("binaryFile")
         .load(io)
         .select("content")
         .limit(1)  # Read at most 1 file
-        .mapInPandas(func=lambda iterator: map(sample_data, iterator), schema="sampled BINARY")
+        .mapInPandas(func=lambda iterator: map(infer_metadata, iterator), schema="inferred BINARY")
         .head()
     )
-    sampled = pickle.loads(sampled[0])
+    metadata = pickle.loads(metadata[0])
 
     def read_excel_on_spark(
-        pdf_or_pser: Union[pd.DataFrame, pd.Series],
+        schema: StructType,
+        index_columns: List[str],
+        raw_index_names: List[str],
         sn: Union[str, int, List[Union[str, int]], None],
-    ) -> Union[DataFrame, Series]:
-        if isinstance(pdf_or_pser, pd.Series):
-            pdf = pdf_or_pser.to_frame()
-        else:
-            pdf = pdf_or_pser
-
-        psdf = cast(DataFrame, from_pandas(pdf))
-
-        raw_schema = psdf._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema
-        index_scol_names = psdf._internal.index_spark_column_names
+    ) -> DataFrame:
+        raw_schema = schema
         nullable_fields = []
         for field in raw_schema.fields:
-            if field.name in index_scol_names:
+            if field.name in index_columns:
                 nullable_fields.append(field)
             else:
                 nullable_fields.append(
@@ -1223,10 +1233,6 @@ def read_excel(
                 )
         nullable_schema = StructType(nullable_fields)
         return_schema = force_decimal_precision_scale(nullable_schema)
-
-        return_data_fields: Optional[List[InternalField]] = None
-        if psdf._internal.data_fields is not None:
-            return_data_fields = [f.normalize_spark_type() for f in psdf._internal.data_fields]
 
         def output_func(pdf: pd.DataFrame) -> pd.DataFrame:
             pdf = pd.concat([pd_read_excel(bin, sn=sn, nr=nrows) for bin in pdf[pdf.columns[0]]])
@@ -1248,12 +1254,26 @@ def read_excel(
             .select("content")
             .mapInPandas(lambda iterator: map(output_func, iterator), schema=return_schema)
         )
-        return DataFrame(psdf._internal.with_new_sdf(sdf, data_fields=return_data_fields))
 
-    if isinstance(sampled, dict):
-        return {sn: read_excel_on_spark(pdf_or_pser, sn) for sn, pdf_or_pser in sampled.items()}
+        index_spark_columns, index_names = _get_index_map(sdf, index_columns)
+        psdf = DataFrame(
+            InternalFrame(
+                spark_frame=sdf,
+                index_spark_columns=index_spark_columns,
+                index_names=index_names,
+            )
+        )
+        psdf.index.names = raw_index_names
+        return psdf
+
+    if isinstance(metadata, dict):
+        return {
+            sn: read_excel_on_spark(schema, index_columns, raw_index_names, sn)
+            for sn, (schema, raw_index_names, index_columns) in metadata.items()
+        }
     else:
-        return read_excel_on_spark(cast(Union[pd.DataFrame, pd.Series], sampled), sheet_name)
+        (schema, raw_index_names, index_columns) = metadata
+        return read_excel_on_spark(schema, index_columns, raw_index_names, sheet_name)
 
 
 def read_html(

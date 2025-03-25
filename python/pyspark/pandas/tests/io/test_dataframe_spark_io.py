@@ -363,6 +363,7 @@ class DataFrameSparkIOTestsMixin:
 
             self.assert_eq(ps.read_excel(path), pd.read_excel(path))
             self.assert_eq(ps.read_excel(path, nrows=10), pd.read_excel(path, nrows=10))
+            self.assert_eq(ps.read_excel(path, index_col=2), pd.read_excel(path, index_col=2))
 
     def test_read_orc(self):
         with self.temp_dir() as tmp:
