@@ -124,6 +124,7 @@ trait SharedSparkSessionBase
   protected def initializeSession(): Unit = {
     if (_spark == null) {
       _spark = createSparkSession
+      _spark.sparkContext.setLogLevel("ERROR")
     }
   }
 
