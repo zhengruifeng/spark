@@ -20,7 +20,7 @@ from typing import Optional, Tuple, TYPE_CHECKING
 
 from pyspark import since
 from pyspark.ml.common import _java2py, _py2java
-from pyspark.ml.linalg import Matrix, Vector
+from pyspark.ml.linalg import DenseMatrix, Matrix, Vector
 from pyspark.ml.wrapper import JavaWrapper, _jvm
 from pyspark.ml.util import invoke_helper_relation
 from pyspark.sql.column import Column
@@ -550,11 +550,20 @@ class MultivariateGaussian:
     >>> (m.mean, m.cov.toArray())
     (DenseVector([11.0, 12.0]), array([[ 1.,  5.],
            [ 3.,  2.]]))
+    >>> m
+    MultivariateGaussian(mean=[11.0,12.0], cov=DenseMatrix(shape=[2, 2]))
     """
 
     def __init__(self, mean: Vector, cov: Matrix):
         self.mean = mean
         self.cov = cov
+
+    def __repr__(self) -> str:
+        if isinstance(self.cov, DenseMatrix):
+            cov_str = f"DenseMatrix(shape=[{self.cov.numRows}, {self.cov.numCols}])"
+        else:
+            cov_str = f"SparseMatrix(shape=[{self.cov.numRows}, {self.cov.numCols}])"
+        return f"MultivariateGaussian(mean={self.mean}, cov={cov_str})"
 
 
 if __name__ == "__main__":
