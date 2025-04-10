@@ -181,6 +181,7 @@ private[python] case class HybridRowQueue(
   // Each buffer should have at least one row
   private var queues = new java.util.LinkedList[RowQueue]()
 
+  private var isWritingDisk: Boolean = false
   private var writing: RowQueue = _
   private var reading: RowQueue = _
 
@@ -202,6 +203,7 @@ private[python] case class HybridRowQueue(
       // poll out all the buffers and add them back in the same order to make sure that the rows
       // are in correct order.
       val newQueues = new java.util.LinkedList[RowQueue]()
+      var spillBytes: Long = 0L
       while (!queues.isEmpty) {
         val queue = queues.remove()
         val newQueue = if (!queues.isEmpty && queue.isInstanceOf[InMemoryRowQueue]) {
@@ -209,7 +211,7 @@ private[python] case class HybridRowQueue(
           var row = queue.remove()
           while (row != null) {
             diskQueue.add(row)
-            totalSpillBytes += 4 + row.getSizeInBytes
+            spillBytes += 4 + row.getSizeInBytes
             row = queue.remove()
           }
           released += queue.asInstanceOf[InMemoryRowQueue].page.size()
@@ -220,6 +222,7 @@ private[python] case class HybridRowQueue(
         }
         newQueues.add(newQueue)
       }
+      totalSpillBytes += spillBytes
       queues = newQueues
     }
     released
@@ -255,12 +258,17 @@ private[python] case class HybridRowQueue(
   }
 
   def add(row: UnsafeRow): Boolean = {
+    val bytes = 4 + row.getSizeInBytes
     if (writing == null || !writing.add(row)) {
-      writing = createNewQueue(4 + row.getSizeInBytes)
+      writing = createNewQueue(bytes)
+      isWritingDisk = writing.isInstanceOf[DiskRowQueue]
       peakMemoryUsedBytes = math.max(peakMemoryUsedBytes, totalPageSize)
       if (!writing.add(row)) {
         throw QueryExecutionErrors.failedToPushRowIntoRowQueueError(writing.toString)
       }
+    }
+    if (isWritingDisk) {
+      totalSpillBytes += bytes
     }
     true
   }
