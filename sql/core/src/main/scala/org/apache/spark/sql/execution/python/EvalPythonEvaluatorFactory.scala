@@ -28,13 +28,13 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{CompletionIterator, Utils}
 
 abstract class EvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
     output: Seq[Attribute],
-    metrics: Map[String, SQLMetric] = Map.empty)
+    metrics: Map[String, SQLMetric])
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
   protected def evaluate(
@@ -106,13 +106,14 @@ abstract class EvalPythonEvaluatorFactory(
       }.toArray)
 
       // Add rows to queue to join later with the result.
-      val projectedRowIter = iter.map { inputRow =>
+      val projectedRowIter = CompletionIterator[InternalRow, Iterator[InternalRow]](
+        iter.map { inputRow =>
         queue.add(inputRow.asInstanceOf[UnsafeRow])
         projection(inputRow)
-      } ++ {
+      }, {
         metrics.get("jvmSpillSize").foreach(_.add(queue.totalSpillBytes))
-        Iterator.empty[UnsafeRow]
-      }
+        metrics.get("jvmPeakMemory").foreach(_.add(queue.peakMemoryUsedBytes))
+      })
 
       val outputRowIterator =
         evaluate(pyFuncs, argMetas, projectedRowIter, schema, context)

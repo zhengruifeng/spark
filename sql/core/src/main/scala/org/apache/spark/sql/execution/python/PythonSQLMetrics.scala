@@ -61,6 +61,9 @@ object PythonSQLMetrics {
   }
 
   val jvmSizeMetricsDesc: Map[String, String] = {
-    Map("jvmSpillSize" -> "spill size on the JVM side")
+    Map(
+      "jvmSpillSize" -> "spill size on the JVM side",
+      "jvmPeakMemory" -> "peak memory on the JVM side"
+    )
   }
 }

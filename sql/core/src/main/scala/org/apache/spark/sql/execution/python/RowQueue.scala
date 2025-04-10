@@ -188,6 +188,8 @@ private[python] case class HybridRowQueue(
   private[python] def numQueues(): Int = queues.size()
 
   private[python] var totalSpillBytes: Long = 0L
+  private[python] var peakMemoryUsedBytes: Long = 0L
+  private[python] var totalPageSize: Long = 0L
 
   def spill(size: Long, trigger: MemoryConsumer): Long = {
     if (trigger == this) {
@@ -235,8 +237,10 @@ private[python] case class HybridRowQueue(
         null
     }
     val buffer = if (page != null) {
+      totalPageSize += page.size()
       new InMemoryRowQueue(page, numFields) {
         override def close(): Unit = {
+          totalPageSize -= this.page.size()
           freePage(this.page)
         }
       }
@@ -253,6 +257,7 @@ private[python] case class HybridRowQueue(
   def add(row: UnsafeRow): Boolean = {
     if (writing == null || !writing.add(row)) {
       writing = createNewQueue(4 + row.getSizeInBytes)
+      peakMemoryUsedBytes = math.max(peakMemoryUsedBytes, totalPageSize)
       if (!writing.add(row)) {
         throw QueryExecutionErrors.failedToPushRowIntoRowQueueError(writing.toString)
       }
