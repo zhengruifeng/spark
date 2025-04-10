@@ -25,6 +25,7 @@ import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv
 import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -32,7 +33,8 @@ import org.apache.spark.util.Utils
 abstract class EvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
-    output: Seq[Attribute])
+    output: Seq[Attribute],
+    metrics: Map[String, SQLMetric] = Map.empty)
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
   protected def evaluate(
@@ -107,6 +109,9 @@ abstract class EvalPythonEvaluatorFactory(
       val projectedRowIter = iter.map { inputRow =>
         queue.add(inputRow.asInstanceOf[UnsafeRow])
         projection(inputRow)
+      } ++ {
+        metrics.get("jvmSpillSize").foreach(_.add(queue.totalSpillBytes))
+        Iterator.empty[UnsafeRow]
       }
 
       val outputRowIterator =

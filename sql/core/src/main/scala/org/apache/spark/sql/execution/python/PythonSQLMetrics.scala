@@ -31,7 +31,13 @@ trait PythonSQLMetrics { self: SparkPlan =>
     }
   }
 
-  override lazy val metrics: Map[String, SQLMetric] = pythonMetrics
+  protected val jvmMetrics: Map[String, SQLMetric] = {
+    PythonSQLMetrics.jvmSizeMetricsDesc.map { case (k, v) =>
+      k -> SQLMetrics.createSizeMetric(sparkContext, v)
+    }
+  }
+
+  override lazy val metrics: Map[String, SQLMetric] = pythonMetrics ++ jvmMetrics
 }
 
 object PythonSQLMetrics {
@@ -52,5 +58,9 @@ object PythonSQLMetrics {
 
   val pythonOtherMetricsDesc: Map[String, String] = {
     Map("pythonNumRowsReceived" -> "number of output rows")
+  }
+
+  val jvmSizeMetricsDesc: Map[String, String] = {
+    Map("jvmSpillSize" -> "spill size on the JVM side")
   }
 }

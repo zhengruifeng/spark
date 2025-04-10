@@ -187,6 +187,8 @@ private[python] case class HybridRowQueue(
   // exposed for testing
   private[python] def numQueues(): Int = queues.size()
 
+  private[python] var totalSpillBytes: Long = 0L
+
   def spill(size: Long, trigger: MemoryConsumer): Long = {
     if (trigger == this) {
       // When it's triggered by itself, it should write upcoming rows into disk instead of copying
@@ -205,6 +207,7 @@ private[python] case class HybridRowQueue(
           var row = queue.remove()
           while (row != null) {
             diskQueue.add(row)
+            totalSpillBytes += 4 + row.getSizeInBytes
             row = queue.remove()
           }
           released += queue.asInstanceOf[InMemoryRowQueue].page.size()

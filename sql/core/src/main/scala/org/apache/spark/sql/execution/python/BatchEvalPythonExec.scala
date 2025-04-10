@@ -46,7 +46,7 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
       udfs,
       output,
       batchSize,
-      pythonMetrics,
+      metrics,
       jobArtifactUUID,
       conf.pythonUDFProfiler)
   }
@@ -63,7 +63,7 @@ class BatchEvalPythonEvaluatorFactory(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     profiler: Option[String])
-  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+  extends EvalPythonEvaluatorFactory(childOutput, udfs, output, pythonMetrics) {
 
   override def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],

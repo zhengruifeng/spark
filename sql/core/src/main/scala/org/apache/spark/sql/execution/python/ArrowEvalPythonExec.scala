@@ -77,7 +77,7 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
       conf.sessionLocalTimeZone,
       conf.arrowUseLargeVarTypes,
       ArrowPythonRunner.getPythonRunnerConfMap(conf),
-      pythonMetrics,
+      metrics,
       jobArtifactUUID,
       conf.pythonUDFProfiler)
   }
@@ -98,7 +98,7 @@ class ArrowEvalPythonEvaluatorFactory(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     profiler: Option[String])
-  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+  extends EvalPythonEvaluatorFactory(childOutput, udfs, output, pythonMetrics) {
 
   override def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
