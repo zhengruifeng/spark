@@ -298,12 +298,8 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("ImputerModel read/write") {
-    val spark = this.spark
-    import spark.implicits._
-    val surrogateDF = Seq(1.234).toDF("myInputCol")
-
     val instance = new ImputerModel(
-      "myImputer", surrogateDF)
+      "myImputer", Array("myInputCol"), Array(1.234))
       .setInputCols(Array("myInputCol"))
       .setOutputCols(Array("myOutputCol"))
     val newInstance = testDefaultReadWrite(instance)
@@ -312,12 +308,8 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Single Column: ImputerModel read/write") {
-    val spark = this.spark
-    import spark.implicits._
-    val surrogateDF = Seq(1.234).toDF("myInputCol")
-
     val instance = new ImputerModel(
-      "myImputer", surrogateDF)
+      "myImputer", Array("myInputCol"), Array(1.234))
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
     val newInstance = testDefaultReadWrite(instance)
@@ -487,6 +479,18 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
       .setInputCols(Array("nest.value1", "nest.value2"))
       .setOutputCols(Array("out1", "out2"))
     ImputerSuite.iterateStrategyTest(true, imputer, df)
+  }
+
+  test("Load ImputerModel prior to Spark 4.0") {
+    val modelPath = testFile("ml-models/imputer-3.5.3")
+
+    val loadedModel = ImputerModel.load(modelPath)
+    assert(loadedModel.columnNames === Array("value"))
+    assert(loadedModel.surrogates === Array(5.0))
+
+    val metadata = spark.read.json(s"$modelPath/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "3.5.3")
   }
 }
 

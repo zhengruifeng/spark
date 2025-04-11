@@ -238,8 +238,8 @@ object Imputer extends DefaultParamsReadable[Imputer] {
 @Since("2.2.0")
 class ImputerModel private[ml] (
     @Since("2.2.0") override val uid: String,
-    @Since("4.1.0") private val columnNames: Array[String],
-    @Since("4.1.0") private val surrogates: Array[Double])
+    @Since("4.1.0") private[ml] val columnNames: Array[String],
+    @Since("4.1.0") private[ml] val surrogates: Array[Double])
   extends Model[ImputerModel] with ImputerParams with MLWritable {
 
   import ImputerModel._
