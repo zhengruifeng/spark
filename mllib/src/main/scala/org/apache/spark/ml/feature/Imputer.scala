@@ -204,9 +204,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
         s"All the values in ${emptyCols.mkString(",")} are Null, Nan or " +
         s"missingValue(${$(missingValue)})")
     }
-
-    val surrogates = inputColumns.zip(results).toMap
-    copyValues(new ImputerModel(uid, surrogates).setParent(this))
+    copyValues(new ImputerModel(uid, inputColumns, results).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -240,20 +238,20 @@ object Imputer extends DefaultParamsReadable[Imputer] {
 @Since("2.2.0")
 class ImputerModel private[ml] (
     @Since("2.2.0") override val uid: String,
-    @Since("4.1.0") private val surrogates: Map[String, Double])
+    @Since("4.1.0") private val columnNames: Array[String],
+    @Since("4.1.0") private val surrogates: Array[Double])
   extends Model[ImputerModel] with ImputerParams with MLWritable {
 
   import ImputerModel._
 
   // For ml connect only
-  private[ml] def this() = this("", Map.empty)
+  private[ml] def this() = this("", Array.empty, Array.emptyDoubleArray)
 
   @Since("2.2.0")
   def surrogateDF: DataFrame = {
     val spark = SparkSession.builder().getOrCreate()
-    val (colNames, values) = surrogates.toSeq.unzip
-    val rows = java.util.List.of[Row](Row.fromSeq(values))
-    val schema = StructType(colNames.map(c => StructField(c, DoubleType, nullable = false)))
+    val rows = java.util.List.of[Row](Row.fromSeq(surrogates.toImmutableArraySeq))
+    val schema = StructType(columnNames.map(c => StructField(c, DoubleType, nullable = false)))
     spark.createDataFrame(rows, schema)
   }
 
@@ -276,7 +274,7 @@ class ImputerModel private[ml] (
     val (inputColumns, outputColumns) = getInOutCols()
 
     val newCols = inputColumns.map { inputCol =>
-      val surrogate = surrogates(inputCol)
+      val surrogate = surrogates(columnNames.indexOf(inputCol))
       val inputType = SchemaUtils.getSchemaFieldType(dataset.schema, inputCol)
       val ic = col(inputCol).cast(DoubleType)
       when(ic.isNull, surrogate)
@@ -292,7 +290,7 @@ class ImputerModel private[ml] (
   }
 
   override def copy(extra: ParamMap): ImputerModel = {
-    val copied = new ImputerModel(uid, surrogates)
+    val copied = new ImputerModel(uid, columnNames, surrogates)
     copyValues(copied, extra).setParent(parent)
   }
 
@@ -313,14 +311,13 @@ object ImputerModel extends MLReadable[ImputerModel] {
 
   private[ImputerModel] class ImputerModelWriter(instance: ImputerModel) extends MLWriter {
 
-    private case class Data(inputColName: String, surrogate: Double)
+    private case class Data(columnNames: Array[String], surrogates: Array[Double])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val dataPath = new Path(path, "data").toString
-      val data = instance.surrogates.toSeq
-        .map { case (inputColName, surrogate) => Data(inputColName, surrogate) }
-      sparkSession.createDataFrame(data).write.parquet(dataPath)
+      val data = Data(instance.columnNames, instance.surrogates)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 
@@ -334,23 +331,21 @@ object ImputerModel extends MLReadable[ImputerModel] {
       val df = sparkSession.read.parquet(dataPath)
 
       val (majorVersion, minorVersion) = majorMinorVersion(metadata.sparkVersion)
-      val surrogates = if (majorVersion < 4 || (majorVersion == 4 && minorVersion == 0)) {
+      val model = if (majorVersion < 4 || (majorVersion == 4 && minorVersion == 0)) {
         // Spark 4.0 and before.
         val row = df.head()
-        row.schema.fieldNames.zipWithIndex
+        val (columnNames, surrogates) = row.schema.fieldNames
+          .zipWithIndex
           .map { case (name, index) => (name, row.getDouble(index)) }
-          .toMap
+          .unzip
+        new ImputerModel(metadata.uid, columnNames, surrogates)
       } else {
         // After Spark 4.1
-        df.select("inputColName", "surrogate")
-          .collect()
-          .map { row =>
-            val inputColName = row.getString(0)
-            val surrogate = row.getDouble(1)
-            (inputColName, surrogate)
-          }.toMap
+        val row = df.select("columnNames", "surrogates").head()
+        val columnNames = row.getAs[Seq[String]](0).toArray
+        val surrogates = row.getAs[Seq[Double]](1).toArray
+        new ImputerModel(metadata.uid, columnNames, surrogates)
       }
-      val model = new ImputerModel(metadata.uid, surrogates)
       metadata.getAndSetParams(model)
       model
     }
