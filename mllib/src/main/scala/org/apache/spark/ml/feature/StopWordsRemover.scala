@@ -27,7 +27,7 @@ import org.apache.spark.ml.param.shared.{HasInputCol, HasInputCols, HasOutputCol
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{ArrayType, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -137,26 +137,21 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    val t = if ($(caseSensitive)) {
-      val stopWordsSet = $(stopWords).toSet
-      udf { terms: Seq[String] =>
-        terms.filter(s => !stopWordsSet.contains(s))
+
+    val (inputColNames, outputColNames) = getInOutCols()
+    val outputCols = if ($(caseSensitive)) {
+      val stopWordsArray = $(stopWords).distinct.sorted
+      inputColNames.map { inputColName =>
+        filter(col(inputColName), c => !array_contains(lit(stopWordsArray), c))
       }
     } else {
       val lc = new Locale($(locale))
-      // scalastyle:off caselocale
-      val toLower = (s: String) => if (s != null) s.toLowerCase(lc) else s
-      // scalastyle:on caselocale
-      val lowerStopWords = $(stopWords).map(toLower(_)).toSet
-      udf { terms: Seq[String] =>
-        terms.filter(s => !lowerStopWords.contains(toLower(s)))
+      val stopWordsArray = $(stopWords).map(_.toLowerCase(lc)).distinct.sorted
+      inputColNames.map { inputColName =>
+        filter(col(inputColName), c => !array_contains(lit(stopWordsArray), c))
       }
     }
 
-    val (inputColNames, outputColNames) = getInOutCols()
-    val outputCols = inputColNames.map { inputColName =>
-      t(col(inputColName))
-    }
     val outputMetadata = outputColNames.map(outputSchema(_).metadata)
     dataset.withColumns(
       outputColNames.toImmutableArraySeq,
