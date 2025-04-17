@@ -81,14 +81,26 @@ object StatFunctions extends Logging {
     val accuracy = if (relativeError == 0.0) {
       Int.MaxValue
     } else {
-      math.min(Int.MaxValue, (1.0 / relativeError).ceil.toLong).toInt
+      val raw = (1.0 / relativeError).ceil.toLong
+      math.max(1, math.min(Int.MaxValue, raw)).toInt
     }
 
     val results = Array.fill(cols.size)(Seq.empty[Double])
-    df.select(posexplode(array(columns: _*)).as(Seq("index", "value")))
-      .where(!isnull(col("value")) && !isnan(col("value")))
-      .groupBy("index")
-      .agg(approx_percentile(col("value"), lit(probabilities), lit(accuracy)))
+    val aggregated = if (cols.size == 1) {
+      df.select(columns.head.as("value"))
+        .where(!isnull(col("value")) && !isnan(col("value")))
+        .select(lit(0).as("index"),
+          approx_percentile(
+            col("value"), lit(probabilities), lit(accuracy)).as("quantiles"))
+    } else {
+      df.select(posexplode(array(columns: _*)).as(Seq("index", "value")))
+        .where(!isnull(col("value")) && !isnan(col("value")))
+        .groupBy("index")
+        .agg(approx_percentile(
+          col("value"), lit(probabilities), lit(accuracy)).as("quantiles"))
+    }
+    aggregated
+      .where(!isnull(col("quantiles")))
       .collect()
       .foreach { row =>
         val index = row.getInt(0)
