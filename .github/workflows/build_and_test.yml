@@ -723,7 +723,7 @@ jobs:
   misc:
     needs: [precondition]
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).misc == 'true'
-    name: MIMA, License, Protobuf, UI, Python CodeGen and others
+    name: Misc - MIMA, License, Protobuf, UI, Connect CodeGen and others
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -744,6 +744,10 @@ jobs:
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
+    - name: Install Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
     - name: Install Node.js
       uses: actions/setup-node@v4
       with:
@@ -763,10 +767,6 @@ jobs:
       with:
         input: sql/connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-4.0,subdir=sql/connect/common/src/main'
-    - name: Install Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
     - name: Install dependencies for Python CodeGen check
       run: |
         python3.11 -m pip install 'black==23.12.1' 'protobuf==5.29.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
@@ -783,6 +783,8 @@ jobs:
       run: ./dev/test-dependencies.sh
     - name: MIMA test
       run: ./dev/mima
+    - name: Spark connect jvm client mima check
+      run: ./dev/connect-jvm-client-mima-check
     - name: Scala structured logging check
       if: inputs.branch != 'branch-3.5'
       run: python3.11 ./dev/structured_logging_style.py
@@ -796,7 +798,7 @@ jobs:
     needs: [precondition, infra-image]
     # always run if lint == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).lint == 'true'
-    name: Linters, licenses, and dependencies
+    name: Linters
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -861,8 +863,6 @@ jobs:
       run: ./dev/lint-scala
     - name: Java linter
       run: ./dev/lint-java
-    - name: Spark connect jvm client mima check
-      run: ./dev/connect-jvm-client-mima-check
     - name: Install Python linter dependencies for branch-3.5
       if: inputs.branch == 'branch-3.5'
       run: |
