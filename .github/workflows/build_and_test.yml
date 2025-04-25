@@ -123,7 +123,7 @@ jobs:
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
               \"k8s-integration-tests\" : \"$kubernetes\",
-              \"misc\" : \"misc\",
+              \"misc\" : \"$misc\",
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error

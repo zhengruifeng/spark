@@ -52,6 +52,5 @@ jobs:
           "docker-integration-tests": "true",
           "yarn": "true",
           "k8s-integration-tests": "true",
-          "buf": "true",
-          "ui": "true"
+          "misc": "true"
         }
