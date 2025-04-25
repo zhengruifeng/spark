@@ -98,8 +98,7 @@ jobs:
             sparkr=`./dev/is-changed.py -m sparkr`
             tpcds=`./dev/is-changed.py -m sql`
             docker=`./dev/is-changed.py -m docker-integration-tests`
-            buf=true
-            ui=true
+            misc=true
             docs=true
           else
             pandas=false
@@ -108,8 +107,7 @@ jobs:
             sparkr=false
             tpcds=false
             docker=false
-            buf=false
-            ui=false
+            misc=false
             docs=false
           fi
           build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive"`
@@ -723,11 +721,12 @@ jobs:
         name: test-results-sparkr--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
 
-  buf:
+  misc:
     needs: [precondition]
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).buf == 'true'
-    name: Protobuf breaking change detection and Python CodeGen check
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).misc == 'true'
+    name: MIMA, License, Protobuf, UI, Python CodeGen and others
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -741,6 +740,17 @@ jobs:
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+    - name: Install Java ${{ inputs.java }}
+      uses: actions/setup-java@v4
+      with:
+        distribution: zulu
+        java-version: ${{ inputs.java }}
+    - name: Install Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+        cache-dependency-path: ui-test/package-lock.json
     - name: Install Buf
       uses: bufbuild/buf-setup-action@v1
       with:
@@ -768,6 +778,19 @@ jobs:
     - name: Python CodeGen check
       if: inputs.branch != 'branch-3.5'
       run: ./dev/check-protos.py
+    - name: License test
+      run: ./dev/check-license
+    - name: Dependencies test
+      run: ./dev/test-dependencies.sh
+    - name: MIMA test
+      run: ./dev/mima
+    - name: Scala structured logging check
+      if: inputs.branch != 'branch-3.5'
+      run: python3.11 ./dev/structured_logging_style.py
+    - run: |
+        cd ui-test
+        npm install --save-dev
+        node --experimental-vm-modules node_modules/.bin/jest
 
   # Static analysis
   lint:
@@ -835,19 +858,8 @@ jobs:
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
-    - name: License test
-      run: ./dev/check-license
-    - name: Dependencies test
-      run: ./dev/test-dependencies.sh
-    - name: MIMA test
-      run: ./dev/mima
     - name: Scala linter
       run: ./dev/lint-scala
-    - name: Scala structured logging check
-      run: |
-        if [ -f ./dev/structured_logging_style.py ]; then
-            python3.9 ./dev/structured_logging_style.py
-        fi
     - name: Java linter
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check
@@ -863,20 +875,6 @@ jobs:
       run: python3.9 -m pip list
     - name: Python linter
       run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
-    # Should delete this section after SPARK 3.5 EOL.
-    - name: Install dependencies for Python code generation check for branch-3.5
-      if: inputs.branch == 'branch-3.5'
-      run: |
-        # See more in "Installation" https://docs.buf.build/installation#tarball
-        curl -LO https://github.com/bufbuild/buf/releases/download/v1.28.1/buf-Linux-x86_64.tar.gz
-        mkdir -p $HOME/buf
-        tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
-        rm buf-Linux-x86_64.tar.gz
-        python3.9 -m pip install 'protobuf==4.25.1' 'mypy-protobuf==3.3.0'
-    # Should delete this section after SPARK 3.5 EOL.
-    - name: Python code generation check for branch-3.5
-      if: inputs.branch == 'branch-3.5'
-      run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
     # Should delete this section after SPARK 3.5 EOL.
     - name: Install JavaScript linter dependencies for branch-3.5
       if: inputs.branch == 'branch-3.5'
@@ -1271,22 +1269,3 @@ jobs:
         with:
           name: spark-on-kubernetes-it-log
           path: "**/target/integration-tests.log"
-
-  ui:
-    needs: [precondition]
-    if: fromJson(needs.precondition.outputs.required).ui == 'true'
-    name: Run Spark UI tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v4
-      - name: Use Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: ui-test/package-lock.json
-      - run: |
-          cd ui-test
-          npm install --save-dev
-          node --experimental-vm-modules node_modules/.bin/jest
