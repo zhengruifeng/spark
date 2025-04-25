@@ -723,7 +723,7 @@ jobs:
   misc:
     needs: [precondition]
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).misc == 'true'
-    name: Misc - MIMA, License, Protobuf, UI, Connect CodeGen and others
+    name: Misc - MIMA, License, Protobuf, UI, Connect and others
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -777,6 +777,11 @@ jobs:
     - name: Python CodeGen check
       if: inputs.branch != 'branch-3.5'
       run: ./dev/check-protos.py
+    - name: UI test
+      run: |
+        cd ui-test
+        npm install --save-dev
+        node --experimental-vm-modules node_modules/.bin/jest
     - name: License test
       run: ./dev/check-license
     - name: Dependencies test
@@ -788,10 +793,6 @@ jobs:
     - name: Scala structured logging check
       if: inputs.branch != 'branch-3.5'
       run: python3.11 ./dev/structured_logging_style.py
-    - run: |
-        cd ui-test
-        npm install --save-dev
-        node --experimental-vm-modules node_modules/.bin/jest
 
   # Static analysis
   lint:
