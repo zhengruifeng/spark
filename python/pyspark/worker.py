@@ -2876,7 +2876,17 @@ def main(infile, outfile):
         ):
             func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type)
         else:
-            func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type)
+            if eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
+                from pyspark.execution.scalar_arrow_udf import ScalarArrowUDF
+
+                # assert 1 == 2
+
+                func, profiler, deserializer, serializer = ScalarArrowUDF.load_udfs(
+                    pickleSer, infile, eval_type
+                )
+
+            else:
+                func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type)
 
         init_time = time.time()
 
