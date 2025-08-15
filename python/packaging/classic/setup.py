@@ -265,6 +265,7 @@ try:
             "pyspark",
             "pyspark.core",
             "pyspark.cloudpickle",
+            "pyspark.execution",
             "pyspark.mllib",
             "pyspark.mllib.linalg",
             "pyspark.mllib.stat",
