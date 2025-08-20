@@ -307,6 +307,44 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
     case _ => false
   }
 
+  private def checkDataType(udf: PythonUDF): Unit = {
+    if (!checkDataType(udf.dataType)) {
+      throw SparkException.internalError(s"Unsupported return type: ${udf.dataType}")
+    }
+    udf.children.foreach { expr =>
+      if (!checkDataType(expr.dataType)) {
+        throw SparkException.internalError(s"Unsupported input type: ${expr.dataType}")
+      }
+    }
+  }
+
+  private def checkDataType(dataType: DataType): Boolean = dataType match {
+    case NullType => true
+    case BooleanType => true
+    case BinaryType => true
+    case s: StringType => true
+    case ByteType => true
+    case ShortType => true
+    case IntegerType => true
+    case LongType => true
+    case FloatType => true
+    case DoubleType => true
+    case d: DecimalType => true
+    case DateType => true
+    case t: TimeType => true
+    case TimestampType => true
+    case TimestampNTZType => true
+    case i: YearMonthIntervalType => false // No python object for YearMonthIntervalType
+    case i: DayTimeIntervalType => true
+    case CalendarIntervalType => true
+    case a: ArrayType => checkDataType(a.elementType)
+    case m: MapType => checkDataType(m.keyType) && checkDataType(m.valueType)
+    case s: StructType => s.fields.forall(f => checkDataType(f.dataType))
+    case v: VariantType => true
+    case u: UserDefinedType[_] => checkDataType(u.sqlType)
+    case _ => false
+  }
+
   /**
    * Extract all the PythonUDFs from the current operator and evaluate them before the operator.
    */
@@ -332,6 +370,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
             validUdfs.forall(PythonUDF.isScalarPythonUDF),
             "Can only extract scalar vectorized udf or sql batch udf")
 
+          validUdfs.foreach(checkDataType)
           val resultAttrs = validUdfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
