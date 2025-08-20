@@ -322,6 +322,8 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
     case NullType => true
     case BooleanType => true
     case BinaryType => true
+    case c: CharType => false // char is not allowed in udf
+    case v: VarcharType => false // varchar is not allowed in udf
     case s: StringType => true
     case ByteType => true
     case ShortType => true
@@ -336,7 +338,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
     case TimestampNTZType => true
     case i: YearMonthIntervalType => false // No python object for YearMonthIntervalType
     case i: DayTimeIntervalType => true
-    case CalendarIntervalType => true
+    case CalendarIntervalType => false // No python object for CalendarIntervalType
     case a: ArrayType => checkDataType(a.elementType)
     case m: MapType => checkDataType(m.keyType) && checkDataType(m.valueType)
     case s: StructType => s.fields.forall(f => checkDataType(f.dataType))
@@ -369,8 +371,8 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
           require(
             validUdfs.forall(PythonUDF.isScalarPythonUDF),
             "Can only extract scalar vectorized udf or sql batch udf")
-
           validUdfs.foreach(checkDataType)
+
           val resultAttrs = validUdfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
