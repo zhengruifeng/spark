@@ -124,6 +124,9 @@ class Column(ParentColumn):
             )
         self._expr = expr
 
+    def __reduce__(self):
+        return (self.__class__, (self._expr,))
+
     def __gt__(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
