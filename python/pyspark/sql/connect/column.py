@@ -562,7 +562,7 @@ class Column(ParentColumn):
             raise PySparkAttributeError(
                 errorClass="ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": item}
             )
-        return self[item]
+        return Column(UnresolvedExtractValue(self._expr, _to_expr(item)))
 
     def __getitem__(self, k: Any) -> ParentColumn:
         if isinstance(k, slice):
