@@ -121,6 +121,9 @@ class DataFrame(ParentDataFrame):
         self.__init__(plan, session)  # type: ignore[misc]
         return self
 
+    def __getnewargs__(self) -> Tuple[Any, ...]:
+        return (self._plan, self._session)
+
     def __init__(
         self,
         plan: plan.LogicalPlan,
