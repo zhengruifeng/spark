@@ -22,8 +22,7 @@ import unittest
 import logging
 from typing import cast
 
-from pyspark.sql import Row
-from pyspark.sql.functions import col, encode, lit
+from pyspark.sql import Row, functions as sf
 from pyspark.errors import PythonException
 from pyspark.sql.session import SparkSession
 from pyspark.sql.types import StructType
@@ -115,8 +114,8 @@ class MapInPandasTestsMixin:
 
             df = (
                 self.spark.range(10, numPartitions=3)
-                .select(col("id").cast("string").alias("str"))
-                .withColumn("bin", encode(col("str"), "utf-8"))
+                .select(sf.col("id").cast("string").alias("str"))
+                .withColumn("bin", sf.encode(sf.col("str"), "utf-8"))
             )
             actual = df.mapInPandas(func, "str string, bin binary").collect()
             expected = df.collect()
@@ -206,7 +205,7 @@ class MapInPandasTestsMixin:
         ):
             (
                 self.spark.range(10, numPartitions=3)
-                .withColumn("value", lit(0))
+                .withColumn("value", sf.lit(0))
                 .mapInPandas(dataframes_with_other_column_names, "id int, value int")
                 .collect()
             )
@@ -261,7 +260,7 @@ class MapInPandasTestsMixin:
 
     def test_dataframes_with_more_columns(self):
         df = self.spark.range(10, numPartitions=3).select(
-            "id", col("id").alias("value"), col("id").alias("extra")
+            "id", sf.col("id").alias("value"), sf.col("id").alias("extra")
         )
         expected = df.select("id", "value").collect()
 
@@ -315,7 +314,7 @@ class MapInPandasTestsMixin:
 
                     df = (
                         self.spark.range(10, numPartitions=3)
-                        .select(col("id").cast("double"))
+                        .select(sf.col("id").cast("double"))
                         .mapInPandas(func, "id int")
                     )
                     if safely:
@@ -368,7 +367,7 @@ class MapInPandasTestsMixin:
             f = self.dataframes_and_empty_dataframe_iter("id")
             (
                 self.spark.range(10, numPartitions=3)
-                .withColumn("value", lit(0))
+                .withColumn("value", sf.lit(0))
                 .mapInPandas(f, "id int, value int")
                 .collect()
             )
@@ -396,7 +395,7 @@ class MapInPandasTestsMixin:
         ):
             (
                 self.spark.range(10, numPartitions=3)
-                .withColumn("value", lit(0))
+                .withColumn("value", sf.lit(0))
                 .mapInPandas(empty_dataframes_with_other_columns, "id int, value int")
                 .collect()
             )
