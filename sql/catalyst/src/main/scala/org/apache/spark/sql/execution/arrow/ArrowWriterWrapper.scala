@@ -22,10 +22,10 @@ import java.io.DataOutputStream
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
+import org.apache.arrow.vector.types.pojo.{Schema => ArrowSchema}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.execution.arrow.{ArrowWriter => SparkArrowWriter}
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 
 
@@ -64,15 +64,10 @@ case class ArrowWriterWrapper(
 
 object ArrowWriterWrapper {
   def createAndStartArrowWriter(
-      schema: StructType,
-      timeZoneId: String,
+      arrowSchema: ArrowSchema,
       allocatorOwner: String,
-      errorOnDuplicatedFieldNames: Boolean,
-      largeVarTypes: Boolean,
       dataOut: DataOutputStream,
       context: TaskContext): ArrowWriterWrapper = {
-    val arrowSchema =
-      ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
     val allocator = ArrowUtils.rootAllocator.newChildAllocator(
       s"stdout writer for $allocatorOwner", 0, Long.MaxValue)
     val root = VectorSchemaRoot.create(arrowSchema, allocator)

@@ -243,6 +243,8 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
         writeUDF(dataOut)
       }
 
+      private val arrowSchema = ArrowUtils
+        .toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
       var writer: ArrowWriterWrapper = null
       // Marker inside the input iterator to indicate the start of the next batch.
       private var nextBatchStart: Iterator[InternalRow] = Iterator.empty
@@ -253,8 +255,7 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
             dataOut.writeInt(1) // Notify that there is a group to read.
             assert(writer == null || writer.isClosed)
             writer = ArrowWriterWrapper.createAndStartArrowWriter(
-              schema, timeZoneId, pythonExec,
-              errorOnDuplicatedFieldNames, largeVarTypes, dataOut, context)
+              arrowSchema, pythonExec, dataOut, context)
             nextBatchStart = inputIterator.next()
           }
         }

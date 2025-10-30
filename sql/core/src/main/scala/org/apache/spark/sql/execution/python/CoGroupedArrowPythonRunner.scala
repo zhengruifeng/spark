@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.arrow.ArrowWriterWrapper
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
@@ -94,6 +95,11 @@ class CoGroupedArrowPythonRunner(
         PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
       }
 
+      private val leftArrowSchema = ArrowUtils
+        .toArrowSchema(leftSchema, timeZoneId, true, largeVarTypes)
+      private val rightArrowSchema = ArrowUtils
+        .toArrowSchema(rightSchema, timeZoneId, true, largeVarTypes)
+
       /**
        * Writes the input iterator to the Arrow stream. We slice the input iterator into multiple
        * small batches contain at most `arrowMaxRecordsPerBatch` records.
@@ -124,9 +130,8 @@ class CoGroupedArrowPythonRunner(
         var numRowsInBatch: Int = 0
         if (nextBatchInLeftGroup != null) {
           if (leftGroupArrowWriter == null) {
-            leftGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(leftSchema,
-              timeZoneId, pythonExec + " (left)", errorOnDuplicatedFieldNames = true,
-              largeVarTypes, dataOut, context)
+            leftGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(
+              leftArrowSchema, pythonExec + " (left)", dataOut, context)
           }
           numRowsInBatch = BatchedPythonArrowInput.writeSizedBatch(
             leftGroupArrowWriter.arrowWriter,
@@ -143,9 +148,8 @@ class CoGroupedArrowPythonRunner(
           }
         } else if (nextBatchInRightGroup != null) {
           if (rightGroupArrowWriter == null) {
-            rightGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(rightSchema,
-              timeZoneId, pythonExec + " (right)", errorOnDuplicatedFieldNames = true,
-              largeVarTypes, dataOut, context)
+            rightGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(
+              rightArrowSchema, pythonExec + " (right)", dataOut, context)
           }
           numRowsInBatch = BatchedPythonArrowInput.writeSizedBatch(
             rightGroupArrowWriter.arrowWriter,
