@@ -18,7 +18,7 @@ import unittest
 from inspect import signature
 from typing import Union, Iterator, Tuple, cast, get_type_hints
 
-from pyspark.sql.functions import mean, lit
+from pyspark.sql import functions as sf
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -340,8 +340,8 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
 
         weighted_mean = pandas_udf("double")(weighted_mean)
 
-        actual = df.groupby("id").agg(weighted_mean(df.v, lit(1.0))).sort("id")
-        expected = df.groupby("id").agg(mean(df.v).alias("weighted_mean(v, 1.0)")).sort("id")
+        actual = df.groupby("id").agg(weighted_mean(df.v, sf.lit(1.0))).sort("id")
+        expected = df.groupby("id").agg(sf.mean(df.v).alias("weighted_mean(v, 1.0)")).sort("id")
         assert_frame_equal(expected.toPandas(), actual.toPandas())
 
     def test_ignore_type_hint_in_group_apply_in_pandas(self):

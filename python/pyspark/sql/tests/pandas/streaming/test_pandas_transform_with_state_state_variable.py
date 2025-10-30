@@ -27,7 +27,7 @@ import unittest
 from typing import cast
 
 from pyspark import SparkConf
-from pyspark.sql.functions import array_sort, col, explode, split
+from pyspark.sql import functions as sf
 from pyspark.sql.types import (
     StringType,
     StructType,
@@ -97,7 +97,7 @@ class TransformWithStateStateVariableTestsMixin:
 
     def _build_test_df(self, input_path):
         df = self.spark.readStream.format("text").option("maxFilesPerTrigger", 1).load(input_path)
-        df_split = df.withColumn("split_values", split(df["value"], ","))
+        df_split = df.withColumn("split_values", sf.split(df["value"], ","))
         df_final = df_split.select(
             df_split.split_values.getItem(0).alias("id").cast("string"),
             df_split.split_values.getItem(1).alias("temperature").cast("int"),
@@ -111,7 +111,7 @@ class TransformWithStateStateVariableTestsMixin:
 
     def build_test_df_with_3_cols(self, input_path):
         df = self.spark.readStream.format("text").option("maxFilesPerTrigger", 1).load(input_path)
-        df_split = df.withColumn("split_values", split(df["value"], ","))
+        df_split = df.withColumn("split_values", sf.split(df["value"], ","))
         df_final = df_split.select(
             df_split.split_values.getItem(0).alias("id1").cast("string"),
             df_split.split_values.getItem(1).alias("temperature").cast("int"),
@@ -496,11 +496,9 @@ class TransformWithStateStateVariableTestsMixin:
             )
 
         if with_extra_transformation:
-            from pyspark.sql import functions as fn
-
             tws_df = tws_df.select(
-                fn.col("id").cast("string").alias("key"),
-                fn.to_json(fn.struct(fn.col("value"))).alias("value"),
+                sf.col("id").cast("string").alias("key"),
+                sf.to_json(sf.struct(sf.col("value"))).alias("value"),
             )
 
         q = (
@@ -699,7 +697,7 @@ class TransformWithStateStateVariableTestsMixin:
                     .load()
                 )
                 assert map_state_df_non_flatten.select(
-                    "key.id", explode(col("map_value")).alias("map_key", "map_value")
+                    "key.id", sf.explode(sf.col("map_value")).alias("map_key", "map_value")
                 ).selectExpr(
                     "id AS groupingKey",
                     "map_key.name AS mapKey",
@@ -798,7 +796,7 @@ class TransformWithStateStateVariableTestsMixin:
                 assert list_state_2_df.selectExpr(
                     "key.id AS groupingKey", "list_value.temperature AS valueList"
                 ).sort("groupingKey").withColumn(
-                    "valueSortedList", array_sort(col("valueList"))
+                    "valueSortedList", sf.array_sort(sf.col("valueList"))
                 ).select(
                     "groupingKey", "valueSortedList"
                 ).collect() == [

@@ -24,17 +24,7 @@ from decimal import Decimal
 from typing import cast, Iterator, Tuple, Any
 
 from pyspark.sql import Row, functions as sf
-from pyspark.sql.functions import (
-    array,
-    explode,
-    col,
-    lit,
-    udf,
-    sum,
-    pandas_udf,
-    PandasUDFType,
-    window,
-)
+from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import (
     IntegerType,
     DoubleType,
@@ -81,8 +71,8 @@ class ApplyInPandasTestsMixin:
     def data(self):
         return (
             self.spark.range(10)
-            .withColumn("vs", array([lit(i) for i in range(20, 30)]))
-            .withColumn("v", explode(col("vs")))
+            .withColumn("vs", sf.array([sf.lit(i) for i in range(20, 30)]))
+            .withColumn("v", sf.explode(sf.col("vs")))
             .drop("vs")
         )
 
@@ -194,7 +184,7 @@ class ApplyInPandasTestsMixin:
         assert_frame_equal(expected3, result3)
 
     def test_array_type_correct(self):
-        df = self.data.withColumn("arr", array(col("id"))).repartition(1, "id")
+        df = self.data.withColumn("arr", sf.array(sf.col("id"))).repartition(1, "id")
 
         output_schema = StructType(
             [
@@ -257,7 +247,7 @@ class ApplyInPandasTestsMixin:
             v = pdf.v
             return pdf.assign(norm=(v - v.mean()) / v.std())
 
-        result = df.groupby(col("id") % 2 == 0).apply(normalize).sort("id", "v").toPandas()
+        result = df.groupby(sf.col("id") % 2 == 0).apply(normalize).sort("id", "v").toPandas()
         pdf = df.toPandas()
         expected = pdf.groupby(pdf["id"] % 2 == 0, as_index=False).apply(normalize.func)
         expected = expected.sort_values(["id", "v"]).reset_index(drop=True)
@@ -711,7 +701,7 @@ class ApplyInPandasTestsMixin:
 
         # this was throwing an AnalysisException before SPARK-24208
         res = df_with_pandas.alias("temp0").join(
-            df_with_pandas.alias("temp1"), col("temp0.key") == col("temp1.key")
+            df_with_pandas.alias("temp1"), sf.col("temp0.key") == sf.col("temp1.key")
         )
         self.assertEqual(res.count(), 5)
 
@@ -756,7 +746,7 @@ class ApplyInPandasTestsMixin:
         expected = {0: [0], 1: [1, 2], 2: [1, 2], 3: [3, 4, 5], 4: [3, 4, 5], 5: [3, 4, 5], 6: [6]}
 
         df = self.spark.createDataFrame(data, ["id", "group", "ts", "result"])
-        df = df.select(col("id"), col("group"), col("ts").cast("timestamp"), col("result"))
+        df = df.select(sf.col("id"), sf.col("group"), sf.col("ts").cast("timestamp"), sf.col("result"))
 
         def f(pdf):
             # Assign each result element the ids of the windowed group
@@ -764,7 +754,7 @@ class ApplyInPandasTestsMixin:
             return pdf
 
         result = (
-            df.groupby("group", window("ts", "5 days"))
+            df.groupby("group", sf.window("ts", "5 days"))
             .applyInPandas(f, df.schema)
             .select("id", "result")
             .orderBy("id")
@@ -825,7 +815,7 @@ class ApplyInPandasTestsMixin:
         expected = {0: [1], 1: [2, 2], 2: [2, 2], 3: [3, 3, 3], 4: [3, 3, 3], 5: [3, 3, 3], 6: [3]}
 
         df = self.spark.createDataFrame(data, ["id", "group", "ts", "result"])
-        df = df.select(col("id"), col("group"), col("ts").cast("timestamp"), col("result"))
+        df = df.select(sf.col("id"), sf.col("group"), sf.col("ts").cast("timestamp"), sf.col("result"))
 
         def f(key, pdf):
             group = key[0]
@@ -841,7 +831,7 @@ class ApplyInPandasTestsMixin:
             return pdf.assign(result=[[group] * len(pdf)] * len(pdf))
 
         result = (
-            df.groupby("group", window("ts", "5 days"))
+            df.groupby("group", sf.window("ts", "5 days"))
             .applyInPandas(f, df.schema)
             .select("id", "result")
             .orderBy("id")
@@ -869,7 +859,7 @@ class ApplyInPandasTestsMixin:
         result = (
             df.groupby("id").applyInPandas(f, schema=output_schema).sort("id", "mean").toPandas()
         )
-        expected = df.select("id").distinct().withColumn("mean", lit(24.5)).toPandas()
+        expected = df.select("id").distinct().withColumn("mean", sf.lit(24.5)).toPandas()
 
         assert_frame_equal(expected, result)
 
