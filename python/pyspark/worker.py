@@ -18,7 +18,6 @@
 """
 Worker that receives input from Piped RDD.
 """
-import itertools
 import os
 import sys
 import dataclasses
@@ -2954,8 +2953,6 @@ def read_udfs(pickleSer, infile, eval_type):
         # `a` is an iterator of Series lists (one list per batch, containing all columns)
         # Materialize first batch to get keys, then create generator for value batches
         def mapper(a):
-            import itertools
-
             series_iter = iter(a)
             # Need to materialize the first series list to get the keys
             first_series_list = next(series_iter)
@@ -3154,8 +3151,6 @@ def read_udfs(pickleSer, infile, eval_type):
             and see `wrap_grouped_map_pandas_udf_with_state` for more details on how output will
             be used.
             """
-            from itertools import tee
-
             state = a[1]
             data_gen = (x[0] for x in a[0])
 
@@ -3163,7 +3158,7 @@ def read_udfs(pickleSer, infile, eval_type):
             # We want to peek the first element to construct the key, hence applying
             # tee to construct the key while we retain another iterator/generator
             # for values.
-            keys_gen, values_gen = tee(data_gen)
+            keys_gen, values_gen = itertools.tee(data_gen)
             keys_elem = next(keys_gen)
             keys = [keys_elem[o] for o in parsed_offsets[0][0]]
 
