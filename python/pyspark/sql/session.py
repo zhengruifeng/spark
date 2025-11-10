@@ -1496,15 +1496,16 @@ class SparkSession(SparkConversionMixin):
 
         Create a DataFrame from a pandas DataFrame.
 
-        >>> spark.createDataFrame(df.toPandas()).show()  # doctest: +SKIP
+        >>> spark.createDataFrame(df.toPandas()).show()
         +-----+---+
         | name|age|
         +-----+---+
         |Alice|  1|
         +-----+---+
 
-        >>> pdf = pandas.DataFrame([[1, 2]])  # doctest: +SKIP
-        >>> spark.createDataFrame(pdf).show()  # doctest: +SKIP
+        >>> import pandas as pd
+        >>> pdf = pd.DataFrame([[1, 2]])
+        >>> spark.createDataFrame(pdf).show()
         +---+---+
         |  0|  1|
         +---+---+
@@ -1513,15 +1514,16 @@ class SparkSession(SparkConversionMixin):
 
         Create a DataFrame from a PyArrow Table.
 
-        >>> spark.createDataFrame(df.toArrow()).show()  # doctest: +SKIP
+        >>> spark.createDataFrame(df.toArrow()).show()
         +-----+---+
         | name|age|
         +-----+---+
         |Alice|  1|
         +-----+---+
 
-        >>> table = pyarrow.table({'0': [1], '1': [2]})  # doctest: +SKIP
-        >>> spark.createDataFrame(table).show()  # doctest: +SKIP
+        >>> import pyarrow as pa
+        >>> table = pa.table({'0': [1], '1': [2]})
+        >>> spark.createDataFrame(table).show()
         +---+---+
         |  0|  1|
         +---+---+
@@ -2434,15 +2436,20 @@ def _test() -> None:
     import os
     import doctest
     import pyspark.sql.session
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     os.chdir(os.environ["SPARK_HOME"])
 
-    # Disable Doc Tests for Spark Connect only functions:
-    pyspark.sql.session.SparkSession.registerProgressHandler.__doc__ = None
-    pyspark.sql.session.SparkSession.removeProgressHandler.__doc__ = None
-    pyspark.sql.session.SparkSession.clearProgressHandlers.__doc__ = None
-
     globs = pyspark.sql.session.__dict__.copy()
+
+    # Disable Doc Tests for Spark Connect only functions:
+    del pyspark.sql.session.SparkSession.registerProgressHandler.__doc__
+    del pyspark.sql.session.SparkSession.removeProgressHandler.__doc__
+    del pyspark.sql.session.SparkSession.clearProgressHandlers.__doc__
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.session.SparkSession.createDataFrame.__doc__
+
     globs["spark"] = (
         SparkSession.builder.master("local[4]").appName("sql.session tests").getOrCreate()
     )
