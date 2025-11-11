@@ -377,7 +377,7 @@ class SparkConversionMixin:
     ) -> "DataFrame":
         from pyspark.sql import SparkSession
 
-        assert isinstance(self, SparkSession)
+        assert isinstance(self, SparkSession), type(self)
 
         timezone = self._jconf.sessionLocalTimeZone()
 
