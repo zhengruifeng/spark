@@ -377,7 +377,7 @@ class SparkConversionMixin:
     ) -> "DataFrame":
         from pyspark.sql import SparkSession
 
-        assert isinstance(self, SparkSession), type(self)
+        assert isinstance(self, SparkSession) or self.__class__.__name__.endswith("SparkSession")
 
         timezone = self._jconf.sessionLocalTimeZone()
 
@@ -446,7 +446,7 @@ class SparkConversionMixin:
         """
         from pyspark.sql import SparkSession
 
-        assert isinstance(self, SparkSession)
+        assert isinstance(self, SparkSession) or self.__class__.__name__.endswith("SparkSession")
 
         if timezone is not None:
             from pyspark.sql.pandas.types import (
@@ -637,7 +637,7 @@ class SparkConversionMixin:
         from pyspark.sql import SparkSession
         from pyspark.sql.dataframe import DataFrame
 
-        assert isinstance(self, SparkSession)
+        assert isinstance(self, SparkSession) or self.__class__.__name__.endswith("SparkSession")
 
         from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
         from pyspark.sql.types import TimestampType
@@ -764,7 +764,7 @@ class SparkConversionMixin:
         from pyspark.sql import SparkSession
         from pyspark.sql.dataframe import DataFrame
 
-        assert isinstance(self, SparkSession)
+        assert isinstance(self, SparkSession) or self.__class__.__name__.endswith("SparkSession")
 
         from pyspark.sql.pandas.serializers import ArrowStreamSerializer
         from pyspark.sql.pandas.types import (
