@@ -449,7 +449,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       u: UnresolvedAttribute,
       q: LogicalPlan,
       includeLastResort: Boolean = false): Option[Expression] = {
-    assert(u.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty,
+    assert(u.containsTag(LogicalPlan.PLAN_ID_TAG),
       s"UnresolvedAttribute $u should have a Plan Id tag")
 
     resolveDataFrameColumn(u, q.children).map { r =>
@@ -523,7 +523,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     val planId = planIdOpt.get
     logDebug(s"Extract plan_id $planId from $u")
 
-    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).nonEmpty
+    val isMetadataAccess = u.containsTag(LogicalPlan.IS_METADATA_COL)
 
     val (resolved, matched) = resolveDataFrameColumnByPlanId(
       u, planId, isMetadataAccess, q, 0)
