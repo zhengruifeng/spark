@@ -393,6 +393,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     def arrow_to_pandas(
         self, arrow_column, idx, struct_in_pandas="dict", ndarray_as_list=False, spark_type=None
     ):
+        import pandas as pd
+
         # If the given column is a date type column, creates a series of datetime.date directly
         # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
         # datetime64[ns] type handling.
@@ -403,6 +405,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             "types_mapper": pd.ArrowDtype,
         }
         s = arrow_column.to_pandas(**pandas_options)
+        assert str(s.dtype).endswith("[pyarrow]"), s.dtype
         return s
 
         # converter = _create_converter_to_pandas(
