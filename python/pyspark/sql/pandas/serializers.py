@@ -400,6 +400,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         pandas_options = {
             "date_as_object": True,
             "coerce_temporal_nanoseconds": True,
+            "types_mapper": pd.ArrowDtype,
         }
         s = arrow_column.to_pandas(**pandas_options)
 
