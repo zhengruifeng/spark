@@ -403,16 +403,17 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             "types_mapper": pd.ArrowDtype,
         }
         s = arrow_column.to_pandas(**pandas_options)
+        return s
 
-        converter = _create_converter_to_pandas(
-            data_type=spark_type or from_arrow_type(arrow_column.type, prefer_timestamp_ntz=True),
-            nullable=True,
-            timezone=self._timezone,
-            struct_in_pandas=struct_in_pandas,
-            error_on_duplicated_field_names=True,
-            ndarray_as_list=ndarray_as_list,
-        )
-        return converter(s)
+        # converter = _create_converter_to_pandas(
+        #     data_type=spark_type or from_arrow_type(arrow_column.type, prefer_timestamp_ntz=True),
+        #     nullable=True,
+        #     timezone=self._timezone,
+        #     struct_in_pandas=struct_in_pandas,
+        #     error_on_duplicated_field_names=True,
+        #     ndarray_as_list=ndarray_as_list,
+        # )
+        # return converter(s)
 
     def _create_array(self, series, arrow_type, spark_type=None, arrow_cast=False):
         """
