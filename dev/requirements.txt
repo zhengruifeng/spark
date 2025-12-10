@@ -25,8 +25,7 @@ coverage
 mypy==1.8.0
 pytest-mypy-plugins==1.9.3
 flake8==3.9.0
-# See SPARK-38680.
-pandas-stubs<1.2.0.54
+pandas-stubs>=2.2.0
 scipy-stubs; python_version>='3.10'
 types-PyYAML
 
