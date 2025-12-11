@@ -672,12 +672,9 @@ def _check_series_convert_timestamps_internal(
     require_minimum_pandas_version()
 
     import pandas as pd
-    from pandas.api.types import (  # type: ignore[attr-defined]
-        is_datetime64_dtype,
-    )
 
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-    if is_datetime64_dtype(s.dtype):
+    if pd.api.types.is_datetime64_dtype(s.dtype):
         # When tz_localize a tz-naive timestamp, the result is ambiguous if the tz-naive
         # timestamp is during the hour when the clock is adjusted backward during due to
         # daylight saving time (dst).
@@ -740,16 +737,13 @@ def _check_series_convert_timestamps_localize(
     require_minimum_pandas_version()
 
     import pandas as pd
-    from pandas.api.types import (  # type: ignore[attr-defined]
-        is_datetime64_dtype,
-    )
 
     from_tz = from_timezone or _get_local_timezone()
     to_tz = to_timezone or _get_local_timezone()
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
     if isinstance(s.dtype, pd.DatetimeTZDtype):
         return s.dt.tz_convert(to_tz).dt.tz_localize(None)
-    elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
+    elif pd.api.types.is_datetime64_dtype(s.dtype) and from_tz != to_tz:
         # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
         return cast(
             "PandasSeriesLike",
@@ -812,7 +806,7 @@ def _convert_map_items_to_dict(s: "PandasSeriesLike") -> "PandasSeriesLike":
     :param s: pandas.Series of lists of (key, value) pairs
     :return: pandas.Series of dictionaries
     """
-    return cast("PandasSeriesLike", s.apply(lambda m: None if m is None else {k: v for k, v in m}))
+    return s.apply(lambda m: None if m is None else {k: v for k, v in m})
 
 
 def _convert_dict_to_map_items(s: "PandasSeriesLike") -> "PandasSeriesLike":
@@ -822,7 +816,7 @@ def _convert_dict_to_map_items(s: "PandasSeriesLike") -> "PandasSeriesLike":
     :param s: pandas.Series of dictionaries
     :return: pandas.Series of lists of (key, value) pairs
     """
-    return cast("PandasSeriesLike", s.apply(lambda d: list(d.items()) if d is not None else None))
+    return s.apply(lambda d: list(d.items()) if d is not None else None)
 
 
 def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
@@ -1212,9 +1206,7 @@ def _create_converter_to_pandas(
 
     conv = _converter(data_type, struct_in_pandas, ndarray_as_list)
     if conv is not None:
-        return lambda pser: pser.apply(  # type: ignore[return-value]
-            lambda x: conv(x) if x is not None else None
-        )
+        return lambda pser: pser.apply(lambda x: conv(x) if x is not None else None)
     else:
         return lambda pser: pser
 
@@ -1277,10 +1269,8 @@ def _create_converter_from_pandas(
             #     lambda x: Decimal(x))).cast(pa.decimal128(1))
 
             def convert_int_to_decimal(pser: pd.Series) -> pd.Series:
-                if pd.api.types.is_integer_dtype(pser):  # type: ignore[attr-defined]
-                    return pser.apply(  # type: ignore[return-value]
-                        lambda x: Decimal(x) if pd.notna(x) else None
-                    )
+                if pd.api.types.is_integer_dtype(pser):
+                    return pser.apply(lambda x: Decimal(x) if pd.notna(x) else None)
                 else:
                     return pser
 
@@ -1514,9 +1504,7 @@ def _create_converter_from_pandas(
 
     conv = _converter(data_type)
     if conv is not None:
-        return lambda pser: pser.apply(  # type: ignore[return-value]
-            lambda x: conv(x) if x is not None else None
-        )
+        return lambda pser: pser.apply(lambda x: conv(x) if x is not None else None)
     else:
         return lambda pser: pser
 
@@ -1610,5 +1598,5 @@ def convert_pandas_using_numpy_type(
             ),
         ):
             np_type = _to_numpy_type(field.dataType)
-            df[field.name] = df[field.name].astype(np_type)
+            df[field.name] = df[field.name].astype(np_type)  # type: ignore[assignment]
     return df

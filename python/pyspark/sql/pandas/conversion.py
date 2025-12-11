@@ -722,7 +722,7 @@ class SparkConversionMixin:
                             # Pandas DataFrame from being updated
                             pdf = pdf.copy()
                             copied = True
-                        pdf[column] = s
+                        pdf[column] = s  # type: ignore[call-overload]
 
             for column, series in pdf.items():
                 if is_timedelta64_dtype(series):
@@ -733,13 +733,13 @@ class SparkConversionMixin:
                     # hold the timedelta instances as are. Otherwise, it converts to the internal
                     # numeric values.
                     ser = pdf[column]
-                    pdf[column] = pd.Series(
+                    pdf[column] = pd.Series(  # type: ignore[call-overload]
                         ser.dt.to_pytimedelta(), index=ser.index, dtype="object", name=ser.name
                     )
 
         # Convert pandas.DataFrame to list of numpy records
         np_records = pdf.set_axis(
-            [f"col_{i}" for i in range(len(pdf.columns))], axis="columns"  # type: ignore[arg-type]
+            [f"col_{i}" for i in range(len(pdf.columns))], axis="columns"
         ).to_records(index=False)
 
         # Check if any columns need to be fixed for Spark to infer properly
@@ -820,9 +820,6 @@ class SparkConversionMixin:
         require_minimum_pyarrow_version()
 
         import pandas as pd
-        from pandas.api.types import (  # type: ignore[attr-defined]
-            is_datetime64_dtype,
-        )
         import pyarrow as pa
 
         # Create the Spark schema from list of names passed in with Arrow types
@@ -867,7 +864,7 @@ class SparkConversionMixin:
             # Any timestamps must be coerced to be compatible with Spark
             spark_types = [
                 TimestampType()
-                if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
+                if pd.api.types.is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
                 else None
                 for t in pdf.dtypes
             ]
