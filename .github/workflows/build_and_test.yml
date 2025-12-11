@@ -41,14 +41,14 @@ on:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
         type: string
-        default: '{"PYSPARK_IMAGE_TO_TEST": "python-311", "PYTHON_TO_TEST": "python3.11"}'
+        default: '{"PYSPARK_IMAGE_TO_TEST": "python-311", "PYTHON_TO_TEST": "python3.11", "UPLOAD_DOCS": "true"}'
       jobs:
         description: >-
           Jobs to run, and should be in JSON format. The values should be matched with the job's key defined
           in this file, e.g., build. See precondition job below.
         required: false
         type: string
-        default: ''
+        default: '{"docs" : "true"}'
     secrets:
       codecov_token:
         description: The upload token of codecov.
@@ -1110,11 +1110,18 @@ jobs:
         echo "SKIP_SQLDOC: $SKIP_SQLDOC"
         cd docs
         bundle exec jekyll build
+    - name: Check docs upload
+      id: check-docs-upload
+      env: ${{ fromJSON(inputs.envs) }}
+      run: |
+        if [ "${{ env.UPLOAD_DOCS }}" == "true" ]; then
+          echo "upload_docs=true" >> $GITHUB_OUTPUT
+        fi
     - name: Tar documentation
-      if: github.repository != 'apache/spark'
+      if: steps.check-docs-upload.outputs.upload_docs == 'true'
       run: tar cjf site.tar.bz2 docs/_site
     - name: Upload documentation
-      if: github.repository != 'apache/spark'
+      if: steps.check-docs-upload.outputs.upload_docs == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: site
