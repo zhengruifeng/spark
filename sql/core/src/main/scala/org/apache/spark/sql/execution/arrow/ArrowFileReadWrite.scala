@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.arrow
 
 import java.nio.channels.Channels
-import java.nio.file.{Files, Path}
+import java.nio.file.{Files, Path, Paths}
 
 import scala.jdk.CollectionConverters._
 
@@ -26,6 +26,8 @@ import org.apache.arrow.vector._
 import org.apache.arrow.vector.ipc.{ArrowFileReader, ArrowFileWriter}
 import org.apache.arrow.vector.types.pojo.Schema
 
+import org.apache.spark.{SparkFiles, TaskContext}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.util.ArrowUtils
 
@@ -98,5 +100,39 @@ private[spark] object ArrowFileReadWrite {
     val reader = new SparkArrowFileReader(path)
     val schema = ArrowUtils.fromArrowSchema(reader.schema)
     ArrowConverters.toDataFrame(reader.read(), schema, spark, "UTC", true, false)
+  }
+
+  def loadWithFile(spark: SparkSession, path: Path): DataFrame = {
+    val fileName = path.getFileName.toString
+    val reader = new SparkArrowFileReader(path)
+    val schema = ArrowUtils.fromArrowSchema(reader.schema)
+
+    val numBatches = reader.read().size
+    if (numBatches == 0) {
+      spark.internalCreateDataFrame(spark.sparkContext.emptyRDD[InternalRow], schema)
+    } else {
+      val numBatchesPerPartition = 3
+      var parallelism = numBatches / numBatchesPerPartition
+      if (numBatches % numBatchesPerPartition != 0) {
+        parallelism += 1
+      }
+
+      spark.sparkContext.addFile(path.toFile.getAbsolutePath)
+      val rows = spark.sparkContext.parallelize(Seq.empty[Int], parallelism)
+        .mapPartitionsWithIndex { case (pid, _) =>
+          val start = pid * numBatchesPerPartition
+          val end = start + numBatchesPerPartition
+          val file = SparkFiles.get(fileName)
+          val reader = new SparkArrowFileReader(Paths.get(file))
+          ArrowConverters.fromBatchIterator(
+            reader.read().slice(start, end),
+            schema,
+            "UTC",
+            true,
+            false,
+            TaskContext.get())
+        }
+      spark.internalCreateDataFrame(rows.setName("arrow"), schema)
+    }
   }
 }

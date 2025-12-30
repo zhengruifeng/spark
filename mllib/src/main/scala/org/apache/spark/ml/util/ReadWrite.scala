@@ -1163,7 +1163,7 @@ private[spark] object ReadWriteUtils {
     if (localSavingModeState.get()) {
       spark match {
         case s: org.apache.spark.sql.classic.SparkSession =>
-          ArrowFileReadWrite.load(s, Paths.get(path))
+          ArrowFileReadWrite.loadWithFile(s, Paths.get(path))
         case o => throw new UnsupportedOperationException(
           s"Unsupported session type: ${o.getClass.getName}")
       }

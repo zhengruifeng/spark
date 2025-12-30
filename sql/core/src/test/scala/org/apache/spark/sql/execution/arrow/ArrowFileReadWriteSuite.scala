@@ -40,12 +40,14 @@ class ArrowFileReadWriteSuite extends QueryTest with SharedSparkSession {
       lit(3.0).alias("double"),
       lit("a string").alias("str"),
       lit(Array(1.0, 2.0, Double.NaN, Double.NegativeInfinity)).alias("arr"))
+    assert(df.count() === 100)
 
     val path = new File(tempDataPath, "simple.arrowfile").toPath
     ArrowFileReadWrite.save(df, path)
 
-    val df2 = ArrowFileReadWrite.load(spark, path)
+    val df2 = ArrowFileReadWrite.loadWithFile(spark, path)
     checkAnswer(df, df2)
+    assert(df2.count() === 100)
   }
 
   test("empty dataframe") {
@@ -55,7 +57,8 @@ class ArrowFileReadWriteSuite extends QueryTest with SharedSparkSession {
     val path = new File(tempDataPath, "empty.arrowfile").toPath
     ArrowFileReadWrite.save(df, path)
 
-    val df2 = ArrowFileReadWrite.load(spark, path)
+    val df2 = ArrowFileReadWrite.loadWithFile(spark, path)
     checkAnswer(df, df2)
+    assert(df2.count() === 0)
   }
 }
