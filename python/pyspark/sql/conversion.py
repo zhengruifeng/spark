@@ -48,6 +48,7 @@ from pyspark.sql.types import (
 
 if TYPE_CHECKING:
     import pyarrow as pa
+    import pandas as pd
 
 
 class LocalDataToArrowConversion:
@@ -845,3 +846,50 @@ class ArrowTableToRowsConversion:
                 return [tuple()] * table.num_rows
             else:
                 return [_create_row(fields, tuple())] * table.num_rows
+
+
+class ArrowArrayToPandasSeriesConversion:
+    """
+    Conversion from pa.Array to pd.Series.
+    """
+
+    @staticmethod
+    def convert(
+        arr: "pa.Array",
+        spark_type: DataType,
+        nullable: bool,
+        *,
+        timezone: Optional[str] = None,
+        struct_in_pandas="dict",
+        ndarray_as_list=False,
+    ) -> "pd.Series":
+        require_minimum_pyarrow_version()
+        import pyarrow as pa
+        from pyspark.sql.pandas.types import _create_converter_to_pandas
+
+        assert isinstance(arr, pa.Array)
+
+        assert spark_type is not None and isinstance(spark_type, DataType)
+
+        # If the given column is a date type column, creates a series of datetime.date directly
+        # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
+        # datetime64[ns] type handling.
+        # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
+        pandas_options = {
+            "date_as_object": True,
+            "coerce_temporal_nanoseconds": True,
+            "integer_object_nulls": True,
+        }
+        ser = arr.to_pandas(**pandas_options)
+
+        converter = _create_converter_to_pandas(
+            data_type=spark_type,
+            nullable=True,
+            timezone=timezone,
+            struct_in_pandas=struct_in_pandas,
+            error_on_duplicated_field_names=True,
+            ndarray_as_list=ndarray_as_list,
+            integer_object_nulls=True,
+        )
+
+        return converter(ser)
