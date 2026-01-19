@@ -21,7 +21,7 @@ import decimal
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
 
 from pyspark.errors import PySparkValueError
-from pyspark.sql.pandas.types import _dedup_names, _deduplicate_field_names, to_arrow_schema
+from pyspark.sql.pandas.types import to_arrow_schema
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import (
     ArrayType,
@@ -147,7 +147,6 @@ class LocalDataToArrowConversion:
         elif isinstance(dataType, StructType):
             field_names = dataType.fieldNames()
             len_field_names = len(field_names)
-            dedup_field_names = _dedup_names(dataType.names)
 
             field_convs = [
                 LocalDataToArrowConversion._create_converter(
@@ -176,7 +175,7 @@ class LocalDataToArrowConversion:
                                 },
                             )
                         return {
-                            dedup_field_names[i]: (
+                            field_names[i]: (
                                 field_convs[i](value[i])  # type: ignore[misc]
                                 if field_convs[i] is not None
                                 else value[i]
@@ -185,7 +184,7 @@ class LocalDataToArrowConversion:
                         }
                     elif isinstance(value, dict):
                         return {
-                            dedup_field_names[i]: (
+                            field_names[i]: (
                                 field_convs[i](value.get(field))  # type: ignore[misc]
                                 if field_convs[i] is not None
                                 else value.get(field)
@@ -196,7 +195,7 @@ class LocalDataToArrowConversion:
                         assert hasattr(value, "__dict__"), f"{type(value)} {value}"
                         value = value.__dict__
                         return {
-                            dedup_field_names[i]: (
+                            field_names[i]: (
                                 field_convs[i](value.get(field))  # type: ignore[misc]
                                 if field_convs[i] is not None
                                 else value.get(field)
@@ -502,14 +501,7 @@ class LocalDataToArrowConversion:
             ]
 
             pa_schema = to_arrow_schema(
-                StructType(
-                    [
-                        StructField(
-                            field.name, _deduplicate_field_names(field.dataType), field.nullable
-                        )
-                        for field in schema.fields
-                    ]
-                ),
+                schema,
                 timezone="UTC",
                 prefers_large_types=use_large_var_types,
             )
@@ -581,7 +573,6 @@ class ArrowTableToRowsConversion:
 
         elif isinstance(dataType, StructType):
             field_names = dataType.names
-            dedup_field_names = _dedup_names(field_names)
 
             field_convs = [
                 ArrowTableToRowsConversion._create_converter(
@@ -600,7 +591,7 @@ class ArrowTableToRowsConversion:
                         field_convs[i](value.get(name, None))  # type: ignore[misc]
                         if field_convs[i] is not None
                         else value.get(name, None)
-                        for i, name in enumerate(dedup_field_names)
+                        for i, name in enumerate(field_names)
                     ]
                     return _create_row(field_names, _values)
 

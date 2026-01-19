@@ -76,7 +76,6 @@ from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import (
     to_arrow_schema,
     to_arrow_type,
-    _deduplicate_field_names,
     from_arrow_schema,
     from_arrow_type,
     _check_arrow_table_timestamps_localize,
@@ -600,10 +599,9 @@ class SparkSession:
             spark_types: List[Optional[DataType]]
             arrow_types: List[Optional[pa.DataType]]
             if isinstance(schema, StructType):
-                deduped_schema = cast(StructType, _deduplicate_field_names(schema))
-                spark_types = [field.dataType for field in deduped_schema.fields]
+                spark_types = [field.dataType for field in schema.fields]
                 arrow_schema = to_arrow_schema(
-                    deduped_schema,
+                    schema,
                     timezone="UTC",
                     prefers_large_types=prefers_large_types,
                 )
@@ -648,9 +646,7 @@ class SparkSession:
 
             if isinstance(schema, StructType):
                 assert arrow_schema is not None
-                _table = _table.rename_columns(
-                    cast(StructType, _deduplicate_field_names(schema)).names
-                ).cast(arrow_schema)
+                _table = _table.cast(arrow_schema)
 
         elif isinstance(data, pa.Table):
             # If no schema supplied by user then get the names of columns only
@@ -667,12 +663,7 @@ class SparkSession:
             _table = (
                 _check_arrow_table_timestamps_localize(data, schema, True, timezone)
                 .cast(
-                    to_arrow_schema(
-                        schema,
-                        error_on_duplicated_field_names_in_struct=True,
-                        timezone="UTC",
-                        prefers_large_types=prefers_large_types,
-                    )
+                    to_arrow_schema(schema, timezone="UTC", prefers_large_types=prefers_large_types)
                 )
                 .rename_columns(schema.names)
             )

@@ -32,7 +32,6 @@ from warnings import warn
 from pyspark.errors.exceptions.captured import unwrap_spark_exception
 from pyspark.util import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
-from pyspark.sql.pandas.types import _dedup_names
 from pyspark.sql.types import (
     ArrayType,
     MapType,
@@ -346,7 +345,6 @@ class PandasConversionMixin:
         prefers_large_var_types = arrowUseLargeVarTypes == "true"
         schema = to_arrow_schema(
             self.schema,
-            error_on_duplicated_field_names_in_struct=True,
             timezone="UTC",
             prefers_large_types=prefers_large_var_types,
         )
@@ -655,7 +653,6 @@ class SparkConversionMixin:
 
                         elif isinstance(dt, StructType):
                             field_names = dt.names
-                            dedup_field_names = _dedup_names(field_names)
                             field_convs = [
                                 _converter(f.dataType) or (lambda x: x) for f in dt.fields
                             ]
@@ -666,7 +663,7 @@ class SparkConversionMixin:
                                 elif isinstance(value, dict):
                                     _values = [
                                         field_convs[i](value.get(name, None))
-                                        for i, name in enumerate(dedup_field_names)
+                                        for i, name in enumerate(field_names)
                                     ]
                                     return _create_row(field_names, _values)
                                 else:
@@ -811,11 +808,7 @@ class SparkConversionMixin:
 
         from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
         from pyspark.sql.types import TimestampType
-        from pyspark.sql.pandas.types import (
-            from_arrow_type,
-            to_arrow_type,
-            _deduplicate_field_names,
-        )
+        from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type
         from pyspark.sql.pandas.utils import (
             require_minimum_pandas_version,
             require_minimum_pyarrow_version,
@@ -862,7 +855,7 @@ class SparkConversionMixin:
 
         # Determine arrow types to coerce data when creating batches
         if isinstance(schema, StructType):
-            spark_types = [_deduplicate_field_names(f.dataType) for f in schema.fields]
+            spark_types = [f.dataType for f in schema.fields]
         elif isinstance(schema, DataType):
             raise PySparkTypeError(
                 errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
@@ -965,7 +958,6 @@ class SparkConversionMixin:
         table = _check_arrow_table_timestamps_localize(table, schema, True, timezone).cast(
             to_arrow_schema(
                 schema,
-                error_on_duplicated_field_names_in_struct=True,
                 timezone="UTC",
                 prefers_large_types=prefers_large_var_types,
             )

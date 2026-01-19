@@ -72,7 +72,6 @@ if TYPE_CHECKING:
 def to_arrow_type(
     dt: DataType,
     *,
-    error_on_duplicated_field_names_in_struct: bool = False,
     timezone: Optional[str] = None,
     prefers_large_types: bool = False,
 ) -> "pa.DataType":
@@ -83,9 +82,6 @@ def to_arrow_type(
     ----------
     dt : :class:`DataType`
         The Spark data type.
-    error_on_duplicated_field_names_in_struct: bool, default False
-        Whether to raise an exception when there are duplicated field names in a
-        :class:`pyspark.sql.types.StructType`. (default ``False``)
     timezone : str, default None
         timeZone required for TimestampType
 
@@ -131,7 +127,6 @@ def to_arrow_type(
             "element",
             to_arrow_type(
                 dt.elementType,
-                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
                 timezone=timezone,
                 prefers_large_types=prefers_large_types,
             ),
@@ -143,7 +138,6 @@ def to_arrow_type(
             "key",
             to_arrow_type(
                 dt.keyType,
-                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
                 timezone=timezone,
                 prefers_large_types=prefers_large_types,
             ),
@@ -153,7 +147,6 @@ def to_arrow_type(
             "value",
             to_arrow_type(
                 dt.valueType,
-                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
                 timezone=timezone,
                 prefers_large_types=prefers_large_types,
             ),
@@ -161,18 +154,11 @@ def to_arrow_type(
         )
         arrow_type = pa.map_(key_field, value_field)
     elif type(dt) == StructType:
-        field_names = dt.names
-        if error_on_duplicated_field_names_in_struct and len(set(field_names)) != len(field_names):
-            raise UnsupportedOperationException(
-                errorClass="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
-                messageParameters={"field_names": str(field_names)},
-            )
         fields = [
             pa.field(
                 field.name,
                 to_arrow_type(
                     field.dataType,
-                    error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
                     timezone=timezone,
                     prefers_large_types=prefers_large_types,
                 ),
@@ -186,7 +172,6 @@ def to_arrow_type(
     elif isinstance(dt, UserDefinedType):
         arrow_type = to_arrow_type(
             dt.sqlType(),
-            error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
             timezone=timezone,
             prefers_large_types=prefers_large_types,
         )
@@ -231,7 +216,6 @@ def to_arrow_type(
 def to_arrow_schema(
     schema: StructType,
     *,
-    error_on_duplicated_field_names_in_struct: bool = False,
     timezone: Optional[str] = None,
     prefers_large_types: bool = False,
 ) -> "pa.Schema":
@@ -242,9 +226,6 @@ def to_arrow_schema(
     ----------
     schema : :class:`StructType`
         The Spark schema.
-    error_on_duplicated_field_names_in_struct: bool, default False
-        Whether to raise an exception when there are duplicated field names in an inner
-        :class:`pyspark.sql.types.StructType`. (default ``False``)
     timezone : str, default None
         timeZone required for TimestampType
 
@@ -259,7 +240,6 @@ def to_arrow_schema(
             field.name,
             to_arrow_type(
                 field.dataType,
-                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
                 timezone=timezone,
                 prefers_large_types=prefers_large_types,
             ),
@@ -903,7 +883,6 @@ def _create_converter_to_pandas(
     *,
     timezone: Optional[str] = None,
     struct_in_pandas: Optional[str] = None,
-    error_on_duplicated_field_names: bool = True,
     timestamp_utc_localized: bool = True,
     ndarray_as_list: bool = False,
     integer_object_nulls: bool = False,
@@ -926,9 +905,6 @@ def _create_converter_to_pandas(
         When ``dict``, :class:`dict` will be used. If there are duplicated field names,
         The fields will be suffixed, like `a_0`, `a_1`.
         Must be one of: ``row``, ``dict``.
-    error_on_duplicated_field_names : bool, optional
-        Whether raise an exception when there are duplicated field names.
-        (default ``True``)
     timestamp_utc_localized : bool, optional
         Whether the timestamp values are localized to UTC or not.
         The timestamp values from Arrow are localized to UTC,
@@ -1064,15 +1040,6 @@ def _create_converter_to_pandas(
             assert _struct_in_pandas is not None
 
             field_names = dt.names
-
-            if error_on_duplicated_field_names and len(set(field_names)) != len(field_names):
-                raise UnsupportedOperationException(
-                    errorClass="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
-                    messageParameters={"field_names": str(field_names)},
-                )
-
-            dedup_field_names = _dedup_names(field_names)
-
             field_convs = [
                 _converter(f.dataType, _struct_in_pandas, _ndarray_as_list) for f in dt.fields
             ]
@@ -1083,9 +1050,7 @@ def _create_converter_to_pandas(
                     def convert_struct_as_row(value: Any) -> Any:
                         if isinstance(value, dict):
                             # `pyarrow.Table.to_pandas` uses `dict`.
-                            _values = [
-                                value.get(name, None) for i, name in enumerate(dedup_field_names)
-                            ]
+                            _values = [value.get(name, None) for i, name in enumerate(field_names)]
                             return _create_row(field_names, _values)
                         else:
                             # otherwise, `Row` should be used.
@@ -1100,7 +1065,7 @@ def _create_converter_to_pandas(
                                 conv(v) if conv is not None and v is not None else v
                                 for conv, v in zip(
                                     field_convs,
-                                    (value.get(name, None) for name in dedup_field_names),
+                                    (value.get(name, None) for name in field_names),
                                 )
                             ]
                             return _create_row(field_names, _values)
@@ -1120,10 +1085,10 @@ def _create_converter_to_pandas(
                     def convert_struct_as_dict(value: Any) -> Any:
                         if isinstance(value, dict):
                             # `pyarrow.Table.to_pandas` uses `dict`.
-                            return {name: value.get(name, None) for name in dedup_field_names}
+                            return {name: value.get(name, None) for name in field_names}
                         else:
                             # otherwise, `Row` should be used.
-                            return dict(zip(dedup_field_names, value))
+                            return dict(zip(field_names, value))
 
                 else:
 
@@ -1133,16 +1098,16 @@ def _create_converter_to_pandas(
                             return {
                                 name: conv(v) if conv is not None and v is not None else v
                                 for name, conv, v in zip(
-                                    dedup_field_names,
+                                    field_names,
                                     field_convs,
-                                    (value.get(name, None) for name in dedup_field_names),
+                                    (value.get(name, None) for name in field_names),
                                 )
                             }
                         else:
                             # otherwise, `Row` should be used.
                             return {
                                 name: conv(v) if conv is not None and v is not None else v
-                                for name, conv, v in zip(dedup_field_names, field_convs, value)
+                                for name, conv, v in zip(field_names, field_convs, value)
                             }
 
                 return convert_struct_as_dict
@@ -1268,7 +1233,6 @@ def _create_converter_from_pandas(
     data_type: DataType,
     *,
     timezone: Optional[str] = None,
-    error_on_duplicated_field_names: bool = True,
     ignore_unexpected_complex_type_values: bool = False,
     int_to_decimal_coercion_enabled: bool = False,
 ) -> Callable[["pd.Series"], "pd.Series"]:
@@ -1281,9 +1245,6 @@ def _create_converter_from_pandas(
         The data type corresponding to the pandas Series to be converted.
     timezone : str, optional
         The timezone to convert from. If there is a timestamp type, it's required.
-    error_on_duplicated_field_names : bool, optional
-        Whether raise an exception when there are duplicated field names.
-        (default ``True``)
     ignore_unexpected_complex_type_values : bool, optional
         Whether ignore the case where unexpected values are given for complex types.
         If ``False``, each complex type expects:
@@ -1422,15 +1383,6 @@ def _create_converter_from_pandas(
 
         elif isinstance(dt, StructType):
             field_names = dt.names
-
-            if error_on_duplicated_field_names and len(set(field_names)) != len(field_names):
-                raise UnsupportedOperationException(
-                    errorClass="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
-                    messageParameters={"field_names": str(field_names)},
-                )
-
-            dedup_field_names = _dedup_names(field_names)
-
             field_convs = [_converter(f.dataType) for f in dt.fields]
 
             if ignore_unexpected_complex_type_values:
@@ -1440,10 +1392,10 @@ def _create_converter_from_pandas(
                         if isinstance(value, dict):
                             return {
                                 name: value.get(key, None)
-                                for name, key in zip(dedup_field_names, field_names)
+                                for name, key in zip(field_names, field_names)
                             }
                         elif isinstance(value, tuple):
-                            return dict(zip(dedup_field_names, value))
+                            return dict(zip(field_names, value))
                         else:
                             return value
 
@@ -1454,7 +1406,7 @@ def _create_converter_from_pandas(
                             return {
                                 name: conv(v) if conv is not None and v is not None else v
                                 for name, conv, v in zip(
-                                    dedup_field_names,
+                                    field_names,
                                     field_convs,
                                     (value.get(key, None) for key in field_names),
                                 )
@@ -1462,7 +1414,7 @@ def _create_converter_from_pandas(
                         elif isinstance(value, tuple):
                             return {
                                 name: conv(v) if conv is not None and v is not None else v
-                                for name, conv, v in zip(dedup_field_names, field_convs, value)
+                                for name, conv, v in zip(field_names, field_convs, value)
                             }
                         else:
                             return value
@@ -1474,11 +1426,11 @@ def _create_converter_from_pandas(
                         if isinstance(value, dict):
                             return {
                                 name: value.get(key, None)
-                                for name, key in zip(dedup_field_names, field_names)
+                                for name, key in zip(field_names, field_names)
                             }
                         else:
                             # tuple
-                            return dict(zip(dedup_field_names, value))
+                            return dict(zip(field_names, value))
 
                 else:
 
@@ -1487,7 +1439,7 @@ def _create_converter_from_pandas(
                             return {
                                 name: conv(v) if conv is not None and v is not None else v
                                 for name, conv, v in zip(
-                                    dedup_field_names,
+                                    field_names,
                                     field_convs,
                                     (value.get(key, None) for key in field_names),
                                 )
@@ -1496,7 +1448,7 @@ def _create_converter_from_pandas(
                             # tuple
                             return {
                                 name: conv(v) if conv is not None and v is not None else v
-                                for name, conv, v in zip(dedup_field_names, field_convs, value)
+                                for name, conv, v in zip(field_names, field_convs, value)
                             }
 
             return convert_struct
@@ -1563,51 +1515,6 @@ def _create_converter_from_pandas(
         )
     else:
         return lambda pser: pser
-
-
-def _dedup_names(names: List[str]) -> List[str]:
-    if len(set(names)) == len(names):
-        return names
-    else:
-
-        def _gen_dedup(_name: str) -> Callable[[], str]:
-            _i = itertools.count()
-            return lambda: f"{_name}_{next(_i)}"
-
-        def _gen_identity(_name: str) -> Callable[[], str]:
-            return lambda: _name
-
-        gen_new_name = {
-            name: _gen_dedup(name) if len(list(group)) > 1 else _gen_identity(name)
-            for name, group in itertools.groupby(sorted(names))
-        }
-        return [gen_new_name[name]() for name in names]
-
-
-def _deduplicate_field_names(dt: DataType) -> DataType:
-    if isinstance(dt, StructType):
-        dedup_field_names = _dedup_names(dt.names)
-
-        return StructType(
-            [
-                StructField(
-                    dedup_field_names[i],
-                    _deduplicate_field_names(field.dataType),
-                    nullable=field.nullable,
-                )
-                for i, field in enumerate(dt.fields)
-            ]
-        )
-    elif isinstance(dt, ArrayType):
-        return ArrayType(_deduplicate_field_names(dt.elementType), containsNull=dt.containsNull)
-    elif isinstance(dt, MapType):
-        return MapType(
-            _deduplicate_field_names(dt.keyType),
-            _deduplicate_field_names(dt.valueType),
-            valueContainsNull=dt.valueContainsNull,
-        )
-    else:
-        return dt
 
 
 def _to_numpy_type(type: DataType) -> Optional["np.dtype"]:
