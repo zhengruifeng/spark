@@ -70,8 +70,17 @@ class ArrowUtilsSuite extends SparkFunSuite {
     )
   }
 
-  test("timestamp") {
+  test("udt") {
+    val udtMetadataKey = "SPARK::udt::metadata::json"
+    val schema = new StructType().add("value", new ExampleBaseTypeUDT, true,
+      new MetadataBuilder()
+      .putLong("a", Long.MaxValue).putString("city", "beijing").build())
+    val arrowType = ArrowUtils.toArrowSchema(schema, null, true, false)
+    assert(arrowType.getFields.get(0).getMetadata.containsKey(udtMetadataKey),
+      arrowType.getFields.get(0).getMetadata)
+  }
 
+  test("timestamp") {
     def roundtripWithTz(timeZoneId: String): Unit = {
       val schema = new StructType().add("value", TimestampType)
       val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, true, false)

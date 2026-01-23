@@ -100,19 +100,31 @@ private[sql] object ArrowUtils {
     case _ => throw ExecutionErrors.unsupportedArrowTypeError(dt)
   }
 
+  private val udtMetadataKey = "SPARK::udt::metadata::json"
   private val metadataKey = "SPARK::metadata::json"
-  private def toArrowMetaData(metadata: Metadata) = {
+
+  private def toArrowMetaData(metadata: Metadata, udtJson: String = "") = {
+    val map = new java.util.HashMap[String, String]
     if (metadata != null && !metadata.isEmpty) {
-      Map(metadataKey -> metadata.json).asJava
-    } else {
-      null // Arrow metadata defaults to NULL
+      map.put(metadataKey, metadata.json)
     }
+    if (udtJson != null && udtJson.nonEmpty) {
+      map.put(udtMetadataKey, udtJson)
+    }
+    map
   }
-  private def fromArrowMetaData(map: java.util.Map[String, String]) = {
+  private def fromArrowMetaData(map: java.util.Map[String, String]): Metadata = {
     if (map != null && map.containsKey(metadataKey)) {
       Metadata.fromJson(map.get(metadataKey))
     } else {
       Metadata.empty // Spark metadata defaults to Metadata.empty
+    }
+  }
+
+  private def extractUDTJson(field: StructField): String = {
+    field.dataType match {
+      case udt: UserDefinedType[_] => udt.json
+      case _ => ""
     }
   }
 
@@ -123,11 +135,13 @@ private[sql] object ArrowUtils {
       nullable: Boolean,
       timeZoneId: String,
       largeVarTypes: Boolean = false,
-      metadata: Metadata = Metadata.empty): Field = {
+      metadata: Metadata = Metadata.empty,
+      udtJson: String = ""): Field = {
     dt match {
       case ArrayType(elementType, containsNull) =>
         val fieldType =
-          new FieldType(nullable, ArrowType.List.INSTANCE, null, toArrowMetaData(metadata))
+          new FieldType(nullable, ArrowType.List.INSTANCE, null,
+            toArrowMetaData(metadata, udtJson))
         new Field(
           name,
           fieldType,
@@ -135,7 +149,8 @@ private[sql] object ArrowUtils {
             toArrowField("element", elementType, containsNull, timeZoneId, largeVarTypes)).asJava)
       case StructType(fields) =>
         val fieldType =
-          new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
+          new FieldType(nullable, ArrowType.Struct.INSTANCE, null,
+            toArrowMetaData(metadata, udtJson))
         new Field(
           name,
           fieldType,
@@ -147,13 +162,15 @@ private[sql] object ArrowUtils {
                 field.nullable,
                 timeZoneId,
                 largeVarTypes,
-                field.metadata)
+                field.metadata,
+                extractUDTJson(field))
             }
             .toImmutableArraySeq
             .asJava)
       case MapType(keyType, valueType, valueContainsNull) =>
         val fieldType =
-          new FieldType(nullable, new ArrowType.Map(false), null, toArrowMetaData(metadata))
+          new FieldType(nullable, new ArrowType.Map(false), null,
+            toArrowMetaData(metadata, udtJson))
         // Note: Map Type struct can not be null, Struct Type key field can not be null
         new Field(
           name,
@@ -171,7 +188,8 @@ private[sql] object ArrowUtils {
         toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes, metadata)
       case g: GeometryType =>
         val fieldType =
-          new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
+          new FieldType(nullable, ArrowType.Struct.INSTANCE, null,
+            toArrowMetaData(metadata, udtJson))
 
         // WKB field is tagged with additional metadata so we can identify that the arrow
         // struct actually represents a geometry schema.
@@ -190,7 +208,8 @@ private[sql] object ArrowUtils {
 
       case g: GeographyType =>
         val fieldType =
-          new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
+          new FieldType(nullable, ArrowType.Struct.INSTANCE, null,
+            toArrowMetaData(metadata, udtJson))
 
         // WKB field is tagged with additional metadata so we can identify that the arrow
         // struct actually represents a geography schema.
@@ -208,7 +227,8 @@ private[sql] object ArrowUtils {
             new Field("wkb", wkbFieldType, Seq.empty[Field].asJava)).asJava)
       case _: VariantType =>
         val fieldType =
-          new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
+          new FieldType(nullable, ArrowType.Struct.INSTANCE, null,
+            toArrowMetaData(metadata, udtJson))
         // The metadata field is tagged with additional metadata so we can identify that the arrow
         // struct actually represents a variant schema.
         val metadataFieldType = new FieldType(
@@ -298,7 +318,8 @@ private[sql] object ArrowUtils {
       case ArrowType.Struct.INSTANCE =>
         val fields = field.getChildren().asScala.map { child =>
           val dt = fromArrowField(child)
-          StructField(child.getName, dt, child.isNullable, fromArrowMetaData(child.getMetadata))
+          StructField(child.getName, dt, child.isNullable,
+            fromArrowMetaData(child.getMetadata).withKeyRemoved(udtMetadataKey))
         }
         StructType(fields.toArray)
       case arrowType => fromArrowType(arrowType)
@@ -320,7 +341,8 @@ private[sql] object ArrowUtils {
         field.nullable,
         timeZoneId,
         largeVarTypes,
-        field.metadata)
+        field.metadata,
+        extractUDTJson(field))
     }.asJava)
   }
 
@@ -330,7 +352,7 @@ private[sql] object ArrowUtils {
         field.getName,
         fromArrowField(field),
         field.isNullable,
-        fromArrowMetaData(field.getMetadata))
+        fromArrowMetaData(field.getMetadata).withKeyRemoved(udtMetadataKey))
     }.toArray)
   }
 
