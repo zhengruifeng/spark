@@ -1067,12 +1067,15 @@ jobs:
         python3.9 -m pip install ipython_genutils # See SPARK-38517
         python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.22' pyarrow pandas 'plotly<6.0.0'
         python3.9 -m pip install 'docutils<0.18.0' # See SPARK-39421
-    - name: List Python packages for branch-3.5 and branch-4.0
-      if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
-      run: python3.9 -m pip list
     - name: List Python packages
-      if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
-      run: python3.11 -m pip list
+      run: |
+        if [[ "${{ inputs.branch }}" == 'branch-3.5' || "${{ inputs.branch }}" == 'branch-4.0' ]]; then
+          python3.9 -m pip list
+        elif [[ "${{ inputs.branch }}" == 'branch-4.1' ]]; then
+          python3.11 -m pip list
+        else
+          python3.12 -m pip list
+        fi
     - name: Install dependencies for documentation generation
       run: |
         # Keep the version of Bundler here in sync with the following locations:
@@ -1106,19 +1109,26 @@ jobs:
     - name: Run documentation build
       if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
       run: |
-        # We need this link to make sure `python3` points to `python3.11` which contains the prerequisite packages.
-        ln -s "$(which python3.11)" "/usr/local/bin/python3"
+        if [[ "${{ inputs.branch }}" == 'branch-4.1' ]]; then
+          export PYSPARK_DRIVER_PYTHON=python3.11
+          export PYSPARK_PYTHON=python3.11
+          # We need this link to make sure `python3` points to `python3.11` which contains the prerequisite packages.
+          ln -s "$(which python3.11)" "/usr/local/bin/python3"
+        else
+          export PYSPARK_DRIVER_PYTHON=python3.12
+          export PYSPARK_PYTHON=python3.12
+          # We need this link to make sure `python3` points to `python3.12` which contains the prerequisite packages.
+          ln -s "$(which python3.12)" "/usr/local/bin/python3"
+        fi
         # Build docs first with SKIP_API to ensure they are buildable without requiring any
         # language docs to be built beforehand.
         cd docs; SKIP_ERRORDOC=1 SKIP_API=1 bundle exec jekyll build; cd ..
         if [ -f "./dev/is-changed.py" ]; then
           # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
-          pyspark_modules=`cd dev && python3.11 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
+          pyspark_modules=`cd dev && $PYSPARK_PYTHON -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
-        export PYSPARK_DRIVER_PYTHON=python3.11
-        export PYSPARK_PYTHON=python3.11
         # Print the values of environment variables `SKIP_ERRORDOC`, `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
         echo "SKIP_ERRORDOC: $SKIP_ERRORDOC"
         echo "SKIP_SCALADOC: $SKIP_SCALADOC"
