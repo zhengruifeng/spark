@@ -101,6 +101,7 @@ private[sql] object ArrowUtils {
   }
 
   private val metadataKey = "SPARK::metadata::json"
+  private val udtMetadataKey = "SPARK::metadata::udt::json"
   private def toArrowMetaData(metadata: Metadata) = {
     if (metadata != null && !metadata.isEmpty) {
       Map(metadataKey -> metadata.json).asJava
@@ -168,7 +169,20 @@ private[sql] object ArrowUtils {
               timeZoneId,
               largeVarTypes)).asJava)
       case udt: UserDefinedType[_] =>
-        toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes, metadata)
+        val newMetadata = new MetadataBuilder()
+          .withMetadata(metadata)
+          .putString(udtMetadataKey, udt.json)
+          .build()
+
+        val fieldType =
+          new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(
+            newMetadata))
+        new Field(
+          name,
+          fieldType,
+          Seq(
+            toArrowField("sqlType", udt.sqlType, nullable, timeZoneId, largeVarTypes)
+          ).asJava)
       case g: GeometryType =>
         val fieldType =
           new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
@@ -262,6 +276,12 @@ private[sql] object ArrowUtils {
     }
   }
 
+  def isUDT(field: Field): Boolean = {
+    assert(field.getType.isInstanceOf[ArrowType.Struct])
+    val metadata = fromArrowMetaData(field.getMetadata)
+    metadata.contains(udtMetadataKey)
+  }
+
   def fromArrowField(field: Field): DataType = {
     field.getType match {
       case _: ArrowType.Map =>
@@ -295,10 +315,16 @@ private[sql] object ArrowUtils {
         } else {
           GeographyType(srid)
         }
+      case ArrowType.Struct.INSTANCE if isUDT(field) =>
+        val metadata = fromArrowMetaData(field.getMetadata)
+        val udt = DataType.fromJson(metadata.getString(udtMetadataKey))
+        assert(udt.isInstanceOf[UserDefinedType[_]])
+        udt
       case ArrowType.Struct.INSTANCE =>
         val fields = field.getChildren().asScala.map { child =>
           val dt = fromArrowField(child)
-          StructField(child.getName, dt, child.isNullable, fromArrowMetaData(child.getMetadata))
+          StructField(child.getName, dt, child.isNullable,
+            fromArrowMetaData(child.getMetadata).withKeyRemoved(udtMetadataKey))
         }
         StructType(fields.toArray)
       case arrowType => fromArrowType(arrowType)
@@ -330,15 +356,15 @@ private[sql] object ArrowUtils {
         field.getName,
         fromArrowField(field),
         field.isNullable,
-        fromArrowMetaData(field.getMetadata))
+        fromArrowMetaData(field.getMetadata).withKeyRemoved(udtMetadataKey))
     }.toArray)
   }
 
   private def deduplicateFieldNames(
       dt: DataType,
       errorOnDuplicatedFieldNames: Boolean): DataType = dt match {
-    case udt: UserDefinedType[_] =>
-      deduplicateFieldNames(udt.sqlType, errorOnDuplicatedFieldNames)
+//    case udt: UserDefinedType[_] =>
+//      deduplicateFieldNames(udt.sqlType, errorOnDuplicatedFieldNames)
     case st @ StructType(fields) =>
       val newNames = if (st.names.toSet.size == st.names.length) {
         st.names
