@@ -81,12 +81,10 @@ class ArrowUtilsSuite extends SparkFunSuite {
       .add("y", new StructType()
         .add("yy", new ExampleBaseTypeUDT, false,
           new MetadataBuilder()
-            .putDouble("c", 1.2).putString("city", "sf").build()))
-//      .add("z", new ArrayType(new ArrayType(new ExampleBaseTypeUDT, true), false), true,
-//        new MetadataBuilder()
-//          .putBoolean("zz", false).putString("city", "hk").build())
-
-
+            .putDouble("c", 1.234).putString("city", "sf").build()))
+      .add("z", new ArrayType(new ArrayType(new ExampleBaseTypeUDT, true), false), true,
+        new MetadataBuilder()
+          .putBoolean("zz", false).putString("city", "hk").build())
     roundtrip(schema)
   }
 
