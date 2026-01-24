@@ -17,7 +17,7 @@
 
 # Image for building and testing Spark branches. Based on Ubuntu 22.04.
 # See also in https://hub.docker.com/_/ubuntu
-FROM ubuntu:jammy-20240911.1
+FROM python:3.12
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark with Python 3.12"
@@ -57,12 +57,7 @@ RUN apt-get update && apt-get install -y \
     tzdata \
     software-properties-common \
     wget \
-    zlib1g-dev
-
-# Install Python 3.12
-RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt-get update && apt-get install -y \
-    python3.12 \
+    zlib1g-dev \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -73,7 +68,6 @@ ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 six==1.16.0 pandas==2.3.3 scipy plotly
 ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.0 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
 
 # Install Python 3.12 packages
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 RUN python3.12 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
 RUN python3.12 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS lxml && \
     python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
