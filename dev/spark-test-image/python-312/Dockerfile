@@ -51,11 +51,8 @@ RUN apt-get update && apt-get install -y \
     libtiff5-dev \
     libwebp-dev \
     libxml2-dev \
-    openjdk-17-jdk-headless \
-    pkg-config \
     qpdf \
     tzdata \
-    software-properties-common \
     wget \
     zlib1g-dev \
     && apt-get autoremove --purge -y \
