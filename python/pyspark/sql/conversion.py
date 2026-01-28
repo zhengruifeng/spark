@@ -1174,7 +1174,7 @@ class ArrowArrayToPandasConversion:
             ),
         ):
             ser = arr.to_pandas(**pandas_options)
-            conv = PandasSeriesConversion._converter(
+            conv = PandasSeriesConversion._create_converter(
                 spark_type,
                 struct_in_pandas=struct_in_pandas,
                 ndarray_as_list=ndarray_as_list,
