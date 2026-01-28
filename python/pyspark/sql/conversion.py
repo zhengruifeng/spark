@@ -1122,6 +1122,15 @@ class ArrowArrayToPandasConversion:
 
         arr = ArrowTimestampConversion.localize_tz(arr)
 
+        # If the given column is a date type column, creates a series of datetime.date directly
+        # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
+        # datetime64[ns] type handling.
+        # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
+        pandas_options = {
+            "date_as_object": True,
+            "coerce_temporal_nanoseconds": True,
+        }
+
         if isinstance(spark_type, ByteType):
             pd_type = pd.Int8Dtype() if arr.null_count > 0 else np.int8
             return pd.Series(arr, dtype=pd_type)
@@ -1151,7 +1160,7 @@ class ArrowArrayToPandasConversion:
                 YearMonthIntervalType,
             ),
         ):
-            return arr.to_pandas()
+            return arr.to_pandas(**pandas_options)
         elif isinstance(
             spark_type,
             (
@@ -1164,7 +1173,7 @@ class ArrowArrayToPandasConversion:
                 GeometryType,
             ),
         ):
-            ser = arr.to_pandas()
+            ser = arr.to_pandas(**pandas_options)
             conv = PandasSeriesConversion._converter(
                 spark_type,
                 struct_in_pandas=struct_in_pandas,
