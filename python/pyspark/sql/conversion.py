@@ -1201,7 +1201,9 @@ class PandasSeriesConversion:
 
         if isinstance(spark_type, ArrayType):
             _element_conv = cls._create_converter(
-                spark_type.elementType, struct_in_pandas, ndarray_as_list
+                spark_type.elementType,
+                struct_in_pandas=struct_in_pandas,
+                ndarray_as_list=ndarray_as_list,
             )
 
             if ndarray_as_list:
@@ -1240,9 +1242,15 @@ class PandasSeriesConversion:
                 return convert_array_ndarray_as_ndarray
 
         elif isinstance(spark_type, MapType):
-            _key_conv = cls._create_converter(spark_type.keyType, struct_in_pandas, ndarray_as_list)
+            _key_conv = cls._create_converter(
+                spark_type.keyType,
+                struct_in_pandas=struct_in_pandas,
+                ndarray_as_list=ndarray_as_list,
+            )
             _value_conv = cls._create_converter(
-                spark_type.valueType, struct_in_pandas, ndarray_as_list
+                spark_type.valueType,
+                struct_in_pandas=struct_in_pandas,
+                ndarray_as_list=ndarray_as_list,
             )
 
             if _key_conv is None and _value_conv is None:
@@ -1282,7 +1290,9 @@ class PandasSeriesConversion:
             dedup_field_names = _dedup_names(field_names)
 
             field_convs = [
-                cls._create_converter(f.dataType, struct_in_pandas, ndarray_as_list)
+                cls._create_converter(
+                    f.dataType, struct_in_pandas=struct_in_pandas, ndarray_as_list=ndarray_as_list
+                )
                 for f in spark_type.fields
             ]
 
