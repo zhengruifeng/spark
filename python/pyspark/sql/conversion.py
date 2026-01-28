@@ -31,7 +31,14 @@ from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
+    BooleanType,
+    ByteType,
+    ShortType,
+    IntegerType,
+    LongType,
     DataType,
+    FloatType,
+    DoubleType,
     DecimalType,
     GeographyType,
     Geography,
@@ -43,8 +50,12 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    DateType,
+    TimeType,
     TimestampNTZType,
     TimestampType,
+    DayTimeIntervalType,
+    YearMonthIntervalType,
     UserDefinedType,
     VariantType,
     VariantVal,
@@ -1070,3 +1081,353 @@ class ArrowArrayToPandasConversion:
             integer_object_nulls=True,
         )
         return converter(ser)
+
+    @classmethod
+    def convert_numpy(
+        cls,
+        arr: Union["pa.Array", "pa.ChunkedArray"],
+        spark_type: DataType,
+        *,
+        timezone: Optional[str] = None,
+        struct_in_pandas: Optional[str] = None,
+        ndarray_as_list: bool = False,
+        df_for_struct: bool = False,
+    ) -> Union["pd.Series", "pd.DataFrame"]:
+        import numpy as np
+        import pandas as pd
+
+        assert isinstance(arr, (pa.Array, pa.ChunkedArray))
+
+        if df_for_struct and isinstance(spark_type, StructType):
+            import pyarrow.types as types
+
+            assert types.is_struct(arr.type)
+            assert len(spark_type.names) == len(arr.type.names), f"{spark_type} {arr.type} "
+
+            series = [
+                cls.convert_numpy(
+                    field_arr,
+                    spark_type=field.dataType,
+                    timezone=timezone,
+                    struct_in_pandas=struct_in_pandas,
+                    ndarray_as_list=ndarray_as_list,
+                    df_for_struct=False,  # always False for child fields
+                )
+                for field_arr, field in zip(arr.flatten(), spark_type)
+            ]
+            pdf = pd.concat(series, axis=1)
+            pdf.columns = spark_type.names  # type: ignore[assignment]
+            return pdf
+
+        arr = ArrowTimestampConversion.localize_tz(arr)
+
+        if isinstance(spark_type, ByteType):
+            pd_type = pd.Int8Dtype() if arr.null_count > 0 else np.int8
+            return pd.Series(arr, dtype=pd_type)
+        elif isinstance(spark_type, ShortType):
+            pd_type = pd.Int16Dtype() if arr.null_count > 0 else np.int16
+            return pd.Series(arr, dtype=pd_type)
+        elif isinstance(spark_type, IntegerType):
+            pd_type = pd.Int32Dtype() if arr.null_count > 0 else np.int32
+            return pd.Series(arr, dtype=pd_type)
+        elif isinstance(spark_type, LongType):
+            pd_type = pd.Int64Dtype() if arr.null_count > 0 else np.int64
+            return pd.Series(arr, dtype=pd_type)
+        elif isinstance(
+            spark_type,
+            (
+                NullType,
+                BooleanType,
+                FloatType,
+                DoubleType,
+                DecimalType,
+                StringType,
+                DateType,
+                TimeType,
+                TimestampType,
+                TimestampNTZType,
+                DayTimeIntervalType,
+                YearMonthIntervalType,
+            ),
+        ):
+            return arr.to_pandas()
+        elif isinstance(
+            spark_type,
+            (
+                ArrayType,
+                MapType,
+                StructType,
+                UserDefinedType,
+                VariantType,
+                GeometryType,
+                GeometryType,
+            ),
+        ):
+            ser = arr.to_pandas()
+            conv = PandasSeriesConversion._converter(
+                spark_type,
+                struct_in_pandas=struct_in_pandas,
+                ndarray_as_list=ndarray_as_list,
+            )
+            if conv is not None:
+                return ser.apply(lambda x: conv(x) if x is not None else None)
+            else:
+                return ser
+        else:  # pragma: no cover
+            assert False, f"Need converter for {spark_type} but failed to find one."
+
+
+class PandasSeriesConversion:
+    @classmethod
+    def _create_converter(
+        cls,
+        spark_type: DataType,
+        *,
+        struct_in_pandas: Optional[str],
+        ndarray_as_list: bool,
+    ) -> Optional[Callable[["pd.Series"], "pd.Series"]]:
+        import numpy as np
+        import pandas as pd
+
+        if isinstance(spark_type, ArrayType):
+            _element_conv = cls._create_converter(
+                spark_type.elementType, struct_in_pandas, ndarray_as_list
+            )
+
+            if ndarray_as_list:
+                if _element_conv is None:
+
+                    def convert_array_ndarray_as_list(value: Any) -> Any:
+                        # In Arrow Python UDF, ArrayType is converted to `np.ndarray`
+                        # whereas a list is expected.
+                        return list(value)
+
+                else:
+                    assert _element_conv is not None
+
+                    def convert_array_ndarray_as_list(value: Any) -> Any:
+                        # In Arrow Python UDF, ArrayType is converted to `np.ndarray`
+                        # whereas a list is expected.
+                        return [_element_conv(v) if v is not None else None for v in value]
+
+                return convert_array_ndarray_as_list
+            else:
+                if _element_conv is None:
+                    return None
+
+                assert _element_conv is not None
+
+                def convert_array_ndarray_as_ndarray(value: Any) -> Any:
+                    if isinstance(value, np.ndarray):
+                        # `pyarrow.Table.to_pandas` uses `np.ndarray`.
+                        return np.array(
+                            [_element_conv(v) if v is not None else None for v in value]
+                        )
+                    else:
+                        # otherwise, `list` should be used.
+                        return [_element_conv(v) if v is not None else None for v in value]
+
+                return convert_array_ndarray_as_ndarray
+
+        elif isinstance(spark_type, MapType):
+            _key_conv = cls._create_converter(spark_type.keyType, struct_in_pandas, ndarray_as_list)
+            _value_conv = cls._create_converter(
+                spark_type.valueType, struct_in_pandas, ndarray_as_list
+            )
+
+            if _key_conv is None and _value_conv is None:
+
+                def convert_map(value: Any) -> Any:
+                    # `pyarrow.Table.to_pandas` uses `list` of key-value tuple.
+                    # otherwise, `dict` should be used.
+                    return dict(value)
+
+            else:
+
+                def convert_map(value: Any) -> Any:
+                    if isinstance(value, list):
+                        # `pyarrow.Table.to_pandas` uses `list` of key-value tuple.
+                        return {
+                            (_key_conv(k) if _key_conv is not None and k is not None else k): (
+                                _value_conv(v) if _value_conv is not None and v is not None else v
+                            )
+                            for k, v in value
+                        }
+                    else:
+                        # otherwise, `dict` should be used.
+                        return {
+                            (_key_conv(k) if _key_conv is not None and k is not None else k): (
+                                _value_conv(v) if _value_conv is not None and v is not None else v
+                            )
+                            for k, v in value.items()
+                        }
+
+            return convert_map
+
+        elif isinstance(spark_type, StructType):
+            assert struct_in_pandas is not None
+
+            field_names = spark_type.names
+
+            dedup_field_names = _dedup_names(field_names)
+
+            field_convs = [
+                cls._create_converter(f.dataType, struct_in_pandas, ndarray_as_list)
+                for f in spark_type.fields
+            ]
+
+            if struct_in_pandas == "row":
+                if all(conv is None for conv in field_convs):
+
+                    def convert_struct_as_row(value: Any) -> Any:
+                        if isinstance(value, dict):
+                            # `pyarrow.Table.to_pandas` uses `dict`.
+                            _values = [
+                                value.get(name, None) for i, name in enumerate(dedup_field_names)
+                            ]
+                            return _create_row(field_names, _values)
+                        else:
+                            # otherwise, `Row` should be used.
+                            return _create_row(field_names, value)
+
+                else:
+
+                    def convert_struct_as_row(value: Any) -> Any:
+                        if isinstance(value, dict):
+                            # `pyarrow.Table.to_pandas` uses `dict`.
+                            _values = [
+                                conv(v) if conv is not None and v is not None else v
+                                for conv, v in zip(
+                                    field_convs,
+                                    (value.get(name, None) for name in dedup_field_names),
+                                )
+                            ]
+                            return _create_row(field_names, _values)
+                        else:
+                            # otherwise, `Row` should be used.
+                            _values = [
+                                conv(v) if conv is not None and v is not None else v
+                                for conv, v in zip(field_convs, value)
+                            ]
+                            return _create_row(field_names, _values)
+
+                return convert_struct_as_row
+
+            elif struct_in_pandas == "dict":
+                if all(conv is None for conv in field_convs):
+
+                    def convert_struct_as_dict(value: Any) -> Any:
+                        if isinstance(value, dict):
+                            # `pyarrow.Table.to_pandas` uses `dict`.
+                            return {name: value.get(name, None) for name in dedup_field_names}
+                        else:
+                            # otherwise, `Row` should be used.
+                            return dict(zip(dedup_field_names, value))
+
+                else:
+
+                    def convert_struct_as_dict(value: Any) -> Any:
+                        if isinstance(value, dict):
+                            # `pyarrow.Table.to_pandas` uses `dict`.
+                            return {
+                                name: conv(v) if conv is not None and v is not None else v
+                                for name, conv, v in zip(
+                                    dedup_field_names,
+                                    field_convs,
+                                    (value.get(name, None) for name in dedup_field_names),
+                                )
+                            }
+                        else:
+                            # otherwise, `Row` should be used.
+                            return {
+                                name: conv(v) if conv is not None and v is not None else v
+                                for name, conv, v in zip(dedup_field_names, field_convs, value)
+                            }
+
+                return convert_struct_as_dict
+
+            else:
+                raise PySparkValueError(
+                    errorClass="UNKNOWN_VALUE_FOR",
+                    messageParameters={"var": str(struct_in_pandas)},
+                )
+
+        elif isinstance(spark_type, UserDefinedType):
+            udt: UserDefinedType = spark_type
+
+            conv = cls._create_converter(
+                udt.sqlType(), struct_in_pandas="row", ndarray_as_list=True
+            )
+
+            if conv is None:
+
+                def convert_udt(value: Any) -> Any:
+                    if hasattr(value, "__UDT__"):
+                        assert isinstance(value.__UDT__, type(udt))
+                        return value
+                    else:
+                        return udt.deserialize(value)
+
+            else:
+
+                def convert_udt(value: Any) -> Any:
+                    if hasattr(value, "__UDT__"):
+                        assert isinstance(value.__UDT__, type(udt))
+                        return value
+                    else:
+                        return udt.deserialize(conv(value))
+
+            return convert_udt
+
+        elif isinstance(spark_type, VariantType):
+
+            def convert_variant(value: Any) -> Any:
+                if isinstance(value, VariantVal):
+                    return value
+                if (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["value", "metadata"])
+                    and all(isinstance(value[key], bytes) for key in ["value", "metadata"])
+                ):
+                    return VariantVal(value["value"], value["metadata"])
+                else:
+                    raise PySparkValueError(errorClass="MALFORMED_VARIANT")
+
+            return convert_variant
+
+        elif isinstance(spark_type, GeographyType):
+
+            def convert_geography(value: Any) -> Any:
+                if value is None:
+                    return None
+                elif (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["wkb", "srid"])
+                    and isinstance(value["wkb"], bytes)
+                    and isinstance(value["srid"], int)
+                ):
+                    return Geography.fromWKB(value["wkb"], value["srid"])
+                else:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOGRAPHY")
+
+            return convert_geography
+
+        elif isinstance(spark_type, GeometryType):
+
+            def convert_geometry(value: Any) -> Any:
+                if value is None:
+                    return None
+                elif (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["wkb", "srid"])
+                    and isinstance(value["wkb"], bytes)
+                    and isinstance(value["srid"], int)
+                ):
+                    return Geometry.fromWKB(value["wkb"], value["srid"])
+                else:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOMETRY")
+
+            return convert_geometry
+
+        else:
+            return None

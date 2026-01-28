@@ -420,7 +420,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     def arrow_to_pandas(
         self, arrow_column, idx, struct_in_pandas="dict", ndarray_as_list=False, spark_type=None
     ):
-        return ArrowArrayToPandasConversion.convert_legacy(
+        return ArrowArrayToPandasConversion.convert_numpy(
             arrow_column,
             spark_type or from_arrow_type(arrow_column.type),
             timezone=self._timezone,
@@ -599,7 +599,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         else:
             spark_type = from_arrow_type(arrow_column.type)
 
-        return ArrowArrayToPandasConversion.convert_legacy(
+        return ArrowArrayToPandasConversion.convert_numpy(
             arr=arrow_column,
             spark_type=spark_type,
             timezone=self._timezone,
