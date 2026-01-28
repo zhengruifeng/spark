@@ -1093,6 +1093,7 @@ class ArrowArrayToPandasConversion:
         ndarray_as_list: bool = False,
         df_for_struct: bool = False,
     ) -> Union["pd.Series", "pd.DataFrame"]:
+        import pyarrow as pa
         import numpy as np
         import pandas as pd
 
