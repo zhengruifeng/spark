@@ -1055,7 +1055,6 @@ class ArrowArrayToPandasConversion:
         # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
         pandas_options = {
             "date_as_object": True,
-            "coerce_temporal_nanoseconds": True,
             "integer_object_nulls": True,
         }
         ser = arr.to_pandas(**pandas_options)
