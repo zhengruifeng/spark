@@ -62,8 +62,6 @@ abstract class BaseArrowPythonRunner[IN, OUT <: AnyRef](
   override val killWorkerOnFlushFailure: Boolean =
     SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
 
-  override val errorOnDuplicatedFieldNames: Boolean = true
-
   override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 

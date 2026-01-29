@@ -38,6 +38,7 @@ import org.apache.spark.sql.execution.python.streaming.TransformWithStateInPySpa
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{DriverStatefulProcessorHandleImpl, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
@@ -246,9 +247,8 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
 
   // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
   // constructor.
-  override protected lazy val schema: StructType = _schema
+  override protected lazy val schema: StructType = ArrowUtils.checkDuplicateFieldNames(_schema)
   override protected lazy val timeZoneId: String = _timeZoneId
-  override protected val errorOnDuplicatedFieldNames: Boolean = true
   override protected val largeVarTypes: Boolean = sqlConf.arrowUseLargeVarTypes
 
   override protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
