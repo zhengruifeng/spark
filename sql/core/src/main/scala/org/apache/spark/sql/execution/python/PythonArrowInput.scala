@@ -20,6 +20,7 @@ import java.io.DataOutputStream
 import java.nio.channels.Channels
 
 import org.apache.arrow.compression.{Lz4CompressionCodec, ZstdCompressionCodec}
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.{VectorSchemaRoot, VectorUnloader}
 import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
@@ -42,16 +43,20 @@ import org.apache.spark.util.Utils
  * JVM (an iterator of internal rows + additional data if required) to Python (Arrow).
  */
 private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
-  protected val schema: StructType
+  protected def schema: StructType
 
-  protected val timeZoneId: String
+  protected def timeZoneId: String
 
-  protected val errorOnDuplicatedFieldNames: Boolean
+  protected def errorOnDuplicatedFieldNames: Boolean
 
-  protected val largeVarTypes: Boolean
+  protected def largeVarTypes: Boolean
 
   protected def pythonMetrics: Map[String, SQLMetric]
 
+  /**
+   * Writes input batch to the stream connected to the Python worker.
+   * Returns true if any data was written to the stream, false if the input is exhausted.
+   */
   protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
@@ -62,15 +67,8 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
   protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {}
 
-  private val arrowSchema = ArrowUtils.toArrowSchema(
-    schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
-  protected val allocator =
-    ArrowUtils.rootAllocator.newChildAllocator(s"stdout writer for $pythonExec", 0, Long.MaxValue)
-  protected val root = VectorSchemaRoot.create(arrowSchema, allocator)
-
   // Create compression codec based on config
-  private val compressionCodecName = SQLConf.get.arrowCompressionCodec
-  private val codec = compressionCodecName match {
+  protected def codec = SQLConf.get.arrowCompressionCodec match {
     case "none" => NoCompressionCodec.INSTANCE
     case "zstd" =>
       val compressionLevel = SQLConf.get.arrowZstdCompressionLevel
@@ -85,21 +83,6 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       throw SparkException.internalError(
         s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
   }
-  protected val unloader = new VectorUnloader(root, true, codec, true)
-
-  protected var writer: ArrowStreamWriter = _
-
-  protected def close(): Unit = {
-    Utils.tryWithSafeFinally {
-      // end writes footer to the output stream and doesn't clean any resources.
-      // It could throw exception if the output stream is closed, so it should be
-      // in the try block.
-      writer.end()
-    } {
-      root.close()
-      allocator.close()
-    }
-  }
 
   protected override def newWriter(
       env: SparkEnv,
@@ -108,6 +91,16 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       partitionIndex: Int,
       context: TaskContext): Writer = {
     new Writer(env, worker, inputIterator, partitionIndex, context) {
+      private val arrowSchema = ArrowUtils.toArrowSchema(
+        schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
+      private val allocator: BufferAllocator = ArrowUtils.rootAllocator
+        .newChildAllocator(s"stdout writer for $pythonExec", 0, Long.MaxValue)
+      private val root: VectorSchemaRoot = VectorSchemaRoot.create(arrowSchema, allocator)
+      private var writer: ArrowStreamWriter = _
+
+      context.addTaskCompletionListener[Unit] { _ =>
+        this.terminate()
+      }
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         handleMetadataBeforeExec(dataOut)
@@ -115,14 +108,31 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       }
 
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
-
         if (writer == null) {
           writer = new ArrowStreamWriter(root, null, dataOut)
           writer.start()
         }
 
         assert(writer != null)
-        writeNextBatchToArrowStream(root, writer, dataOut, inputIterator)
+        val hasInput = writeNextBatchToArrowStream(root, writer, dataOut, inputIterator)
+        if (!hasInput) {
+          this.terminate()
+        }
+        hasInput
+      }
+
+      private def terminate(): Unit = {
+        Utils.tryWithSafeFinally {
+          // end writes footer to the output stream and doesn't clean any resources.
+          // It could throw exception if the output stream is closed, so it should be
+          // in the try block.
+          if (writer != null) {
+            writer.end()
+          }
+        } {
+          root.close()
+          allocator.close()
+        }
       }
     }
   }
@@ -130,7 +140,6 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
 private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[InternalRow]] {
   self: BasePythonRunner[Iterator[InternalRow], _] =>
-  protected val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
 
   protected val maxRecordsPerBatch: Int = {
     val v = SQLConf.get.arrowMaxRecordsPerBatch
@@ -139,11 +148,18 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
 
   protected val maxBytesPerBatch: Long = SQLConf.get.arrowMaxBytesPerBatch
 
+  protected var arrowWriter: arrow.ArrowWriter = _
+  protected var unloader: VectorUnloader = _
+
   protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
       inputIterator: Iterator[Iterator[InternalRow]]): Boolean = {
+    if (arrowWriter == null) {
+      arrowWriter = ArrowWriter.create(root)
+      unloader = new VectorUnloader(root, true, codec, true)
+    }
 
     if (inputIterator.hasNext) {
       val startData = dataOut.size()
@@ -167,7 +183,6 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
       pythonMetrics("pythonDataSent") += deltaData
       true
     } else {
-      super[PythonArrowInput].close()
       false
     }
   }
@@ -184,6 +199,11 @@ private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
       inputIterator: Iterator[Iterator[InternalRow]]): Boolean = {
+    if (arrowWriter == null) {
+      arrowWriter = ArrowWriter.create(root)
+      unloader = new VectorUnloader(root, true, codec, true)
+    }
+
     if (!nextBatchStart.hasNext) {
       if (inputIterator.hasNext) {
         nextBatchStart = inputIterator.next()
@@ -201,7 +221,6 @@ private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
       pythonMetrics("pythonDataSent") += deltaData
       true
     } else {
-      super[BasicPythonArrowInput].close()
       false
     }
   }
@@ -266,25 +285,6 @@ private[python] object BatchedPythonArrowInput {
  */
 private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner =>
 
-  // Helper method to create VectorUnloader with compression for grouped operations
-  private def createUnloaderForGroup(root: VectorSchemaRoot): VectorUnloader = {
-    val codec = SQLConf.get.arrowCompressionCodec match {
-      case "none" => NoCompressionCodec.INSTANCE
-      case "zstd" =>
-        val compressionLevel = SQLConf.get.arrowZstdCompressionLevel
-        val factory = CompressionCodec.Factory.INSTANCE
-        val codecType = new ZstdCompressionCodec(compressionLevel).getCodecType()
-        factory.createCodec(codecType)
-      case "lz4" =>
-        val factory = CompressionCodec.Factory.INSTANCE
-        val codecType = new Lz4CompressionCodec().getCodecType()
-        factory.createCodec(codecType)
-      case other =>
-        throw SparkException.internalError(
-          s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
-    }
-    new VectorUnloader(root, true, codec, true)
-  }
   protected override def newWriter(
       env: SparkEnv,
       worker: PythonWorker,
@@ -309,7 +309,7 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
               schema, timeZoneId, pythonExec,
               errorOnDuplicatedFieldNames, largeVarTypes, dataOut, context)
             // Set the unloader with compression after creating the writer
-            writer.unloader = createUnloaderForGroup(writer.root)
+            writer.unloader = new VectorUnloader(writer.root, true, codec, true)
             nextBatchStart = inputIterator.next()
           }
         }

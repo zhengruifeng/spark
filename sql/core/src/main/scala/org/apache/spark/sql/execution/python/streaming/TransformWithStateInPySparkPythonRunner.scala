@@ -105,7 +105,6 @@ class TransformWithStateInPySparkPythonRunner(
       true
     } else {
       pandasWriter.finalizeCurrentArrowBatch()
-      super[PythonArrowInput].close()
       false
     }
     val deltaData = dataOut.size() - startData
@@ -125,7 +124,7 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
     dataSchema: StructType,
     initStateSchema: StructType,
     processorHandle: StatefulProcessorHandleImpl,
-    _timeZoneId: String,
+    timeZoneId: String,
     initialRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
@@ -133,12 +132,12 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
     batchTimestampMs: Option[Long],
     eventTimeWatermarkForEviction: Option[Long])
   extends TransformWithStateInPySparkPythonBaseRunner[GroupedInType](
-    funcs, evalType, argOffsets, dataSchema, processorHandle, _timeZoneId,
+    funcs, evalType, argOffsets, dataSchema, processorHandle, timeZoneId,
     initialRunnerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
     batchTimestampMs, eventTimeWatermarkForEviction)
   with PythonArrowInput[GroupedInType] {
 
-  override protected lazy val schema: StructType = new StructType()
+  override protected val schema: StructType = new StructType()
     .add("inputData", dataSchema)
     .add("initState", initStateSchema)
 
@@ -201,7 +200,6 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
       if (pandasWriter.getTotalNumRowsForBatch > 0) {
         pandasWriter.finalizeCurrentArrowBatch()
       }
-      super[PythonArrowInput].close()
       false
     }
 
@@ -218,9 +216,9 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
     funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
-    _schema: StructType,
+    override protected val schema: StructType,
     processorHandle: StatefulProcessorHandleImpl,
-    _timeZoneId: String,
+    override protected val timeZoneId: String,
     initialRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
@@ -244,10 +242,6 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
       SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString
     )
 
-  // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
-  // constructor.
-  override protected lazy val schema: StructType = _schema
-  override protected lazy val timeZoneId: String = _timeZoneId
   override protected val errorOnDuplicatedFieldNames: Boolean = true
   override protected val largeVarTypes: Boolean = sqlConf.arrowUseLargeVarTypes
 
