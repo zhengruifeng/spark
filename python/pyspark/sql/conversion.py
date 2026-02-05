@@ -1226,7 +1226,7 @@ class ArrowArrayToPandasConversion:
         # - coerce_temporal_nanoseconds: Handle nanosecond precision timestamps correctly
         # - integer_object_nulls: Use object dtype for integer arrays with nulls
         pandas_options = {
-            "date_as_object": True,
+            "date_as_object": False,
             "coerce_temporal_nanoseconds": True,
             "integer_object_nulls": True,
         }
@@ -1376,7 +1376,7 @@ class ArrowArrayToPandasConversion:
             # datetime64[ns] type handling.
             # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
             pandas_options = {
-                "date_as_object": True,
+                "date_as_object": False,
                 "coerce_temporal_nanoseconds": True,
             }
             return arr.to_pandas(**pandas_options)
