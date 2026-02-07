@@ -830,6 +830,33 @@ class ArrowTestsMixin:
                     ),
                 ]
             ),
+            StructType(
+                [
+                    StructField("a", StringType(), True),
+                    StructField("a", StringType(), True),
+                ]
+            ),
+            StructType(
+                [
+                    StructField("a", StringType(), True),
+                    StructField("a", LongType(), False),
+                ]
+            ),
+            StructType(
+                [
+                    StructField(
+                        "a",
+                        StructType(
+                            [
+                                StructField("x", StringType(), True),
+                                StructField("x", LongType(), False),
+                            ]
+                        ),
+                        True,
+                    ),
+                    StructField("b", LongType(), False),
+                ]
+            ),
         ]:
             with self.subTest(data_type=t):
                 at = to_arrow_type(t, timezone="UTC")
