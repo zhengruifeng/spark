@@ -91,7 +91,6 @@ def from_arrow_metadata(metadata: Optional[Dict[bytes, bytes]]) -> Optional[Dict
 def to_arrow_type(
     dt: DataType,
     *,
-    error_on_duplicated_field_names_in_struct: bool = False,
     timezone: Optional[str] = None,
     prefers_large_types: bool = False,
 ) -> "pa.DataType":
@@ -102,9 +101,6 @@ def to_arrow_type(
     ----------
     dt : :class:`DataType`
         The Spark data type.
-    error_on_duplicated_field_names_in_struct: bool, default False
-        Whether to raise an exception when there are duplicated field names in a
-        :class:`pyspark.sql.types.StructType`. (default ``False``)
     timezone : str, default None
         timeZone required for TimestampType
 
@@ -150,7 +146,6 @@ def to_arrow_type(
             "element",
             to_arrow_type(
                 dt.elementType,
-                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
                 timezone=timezone,
                 prefers_large_types=prefers_large_types,
             ),
@@ -162,7 +157,6 @@ def to_arrow_type(
             "key",
             to_arrow_type(
                 dt.keyType,
-                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
                 timezone=timezone,
                 prefers_large_types=prefers_large_types,
             ),
@@ -172,7 +166,6 @@ def to_arrow_type(
             "value",
             to_arrow_type(
                 dt.valueType,
-                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
                 timezone=timezone,
                 prefers_large_types=prefers_large_types,
             ),
@@ -180,18 +173,11 @@ def to_arrow_type(
         )
         arrow_type = pa.map_(key_field, value_field)
     elif type(dt) == StructType:
-        field_names = dt.names
-        if error_on_duplicated_field_names_in_struct and len(set(field_names)) != len(field_names):
-            raise UnsupportedOperationException(
-                errorClass="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
-                messageParameters={"field_names": str(field_names)},
-            )
         fields = [
             pa.field(
                 field.name,
                 to_arrow_type(
                     field.dataType,
-                    error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
                     timezone=timezone,
                     prefers_large_types=prefers_large_types,
                 ),
@@ -206,7 +192,6 @@ def to_arrow_type(
     elif isinstance(dt, UserDefinedType):
         arrow_type = to_arrow_type(
             dt.sqlType(),
-            error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
             timezone=timezone,
             prefers_large_types=prefers_large_types,
         )
@@ -251,7 +236,6 @@ def to_arrow_type(
 def to_arrow_schema(
     schema: StructType,
     *,
-    error_on_duplicated_field_names_in_struct: bool = False,
     timezone: Optional[str] = None,
     prefers_large_types: bool = False,
 ) -> "pa.Schema":
@@ -262,9 +246,6 @@ def to_arrow_schema(
     ----------
     schema : :class:`StructType`
         The Spark schema.
-    error_on_duplicated_field_names_in_struct: bool, default False
-        Whether to raise an exception when there are duplicated field names in an inner
-        :class:`pyspark.sql.types.StructType`. (default ``False``)
     timezone : str, default None
         timeZone required for TimestampType
 
@@ -279,7 +260,6 @@ def to_arrow_schema(
             field.name,
             to_arrow_type(
                 field.dataType,
-                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
                 timezone=timezone,
                 prefers_large_types=prefers_large_types,
             ),
@@ -289,6 +269,25 @@ def to_arrow_schema(
         for field in schema
     ]
     return pa.schema(fields)
+
+
+def fail_duplicated_field_names(dt: DataType) -> None:
+    if isinstance(dt, StructType):
+        field_names = dt.names
+        if len(set(field_names)) != len(field_names):
+            raise UnsupportedOperationException(
+                errorClass="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
+                messageParameters={"field_names": str(field_names)},
+            )
+        for field in dt:
+            fail_duplicated_field_names(field.dataType)
+    elif isinstance(dt, ArrayType):
+        fail_duplicated_field_names(dt.elementType)
+    elif isinstance(dt, MapType):
+        fail_duplicated_field_names(dt.keyType)
+        fail_duplicated_field_names(dt.valueType)
+    elif isinstance(dt, UserDefinedType):
+        fail_duplicated_field_names(dt.sqlType())
 
 
 def is_variant(at: "pa.DataType") -> bool:

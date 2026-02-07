@@ -87,7 +87,7 @@ from pyspark.sql.connect.expressions import (
     UnresolvedStar,
 )
 from pyspark.sql.connect.functions import builtin as F
-from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
+from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema, fail_duplicated_field_names
 from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
 from pyspark.sql.table_arg import TableArg
 
@@ -1850,11 +1850,8 @@ class DataFrame(ParentDataFrame):
         return (table, schema)
 
     def toArrow(self) -> "pa.Table":
-        schema = to_arrow_schema(
-            self.schema,
-            error_on_duplicated_field_names_in_struct=True,
-            timezone="UTC",
-        )
+        fail_duplicated_field_names(self.schema)
+        schema = to_arrow_schema(self.schema, timezone="UTC")
         table, _ = self._to_table()
         return table.cast(schema)
 

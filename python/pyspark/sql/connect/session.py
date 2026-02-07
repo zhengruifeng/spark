@@ -75,6 +75,7 @@ from pyspark.sql.pandas.types import (
     _deduplicate_field_names,
     from_arrow_schema,
     from_arrow_type,
+    fail_duplicated_field_names,
     _check_arrow_table_timestamps_localize,
 )
 from pyspark.sql.profiler import Profile
@@ -656,12 +657,12 @@ class SparkSession:
             if not isinstance(schema, StructType):
                 schema = from_arrow_schema(data.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
+            fail_duplicated_field_names(schema)
             _table = (
                 _check_arrow_table_timestamps_localize(data, schema, True, timezone)
                 .cast(
                     to_arrow_schema(
                         schema,
-                        error_on_duplicated_field_names_in_struct=True,
                         timezone="UTC",
                         prefers_large_types=prefers_large_types,
                     )

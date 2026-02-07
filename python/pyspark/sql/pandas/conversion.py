@@ -447,7 +447,7 @@ class PandasConversionMixin:
 
         assert isinstance(self, DataFrame)
 
-        from pyspark.sql.pandas.types import to_arrow_schema
+        from pyspark.sql.pandas.types import to_arrow_schema, fail_duplicated_field_names
         from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
         require_minimum_pyarrow_version()
@@ -463,9 +463,9 @@ class PandasConversionMixin:
         )
 
         prefers_large_var_types = arrowUseLargeVarTypes == "true"
+        fail_duplicated_field_names(self.schema)
         schema = to_arrow_schema(
             self.schema,
-            error_on_duplicated_field_names_in_struct=True,
             timezone="UTC",
             prefers_large_types=prefers_large_var_types,
         )
@@ -1052,6 +1052,7 @@ class SparkConversionMixin:
             from_arrow_type,
             from_arrow_schema,
             to_arrow_schema,
+            fail_duplicated_field_names,
             _check_arrow_table_timestamps_localize,
         )
         from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
@@ -1074,10 +1075,11 @@ class SparkConversionMixin:
         if not isinstance(schema, StructType):
             schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
+        fail_duplicated_field_names(schema)
+
         table = _check_arrow_table_timestamps_localize(table, schema, True, timezone).cast(
             to_arrow_schema(
                 schema,
-                error_on_duplicated_field_names_in_struct=True,
                 timezone="UTC",
                 prefers_large_types=prefers_large_var_types,
             )
