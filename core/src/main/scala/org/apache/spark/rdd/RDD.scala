@@ -990,7 +990,9 @@ abstract class RDD[T: ClassTag](
    * a map on the other).
    */
   def zip[U: ClassTag](other: RDD[U]): RDD[(T, U)] = withScope {
-    zipPartitions(other, preservesPartitioning = false) { (thisIter, otherIter) =>
+    zipPartitions(other,
+      preservesPartitioning = false,
+      preservesPartitionSizes = true) { (thisIter, otherIter) =>
       new Iterator[(T, U)] {
         def hasNext: Boolean = (thisIter.hasNext, otherIter.hasNext) match {
           case (true, true) => true
@@ -1002,6 +1004,14 @@ abstract class RDD[T: ClassTag](
     }
   }
 
+  private def zipPartitions[B: ClassTag, V: ClassTag]
+      (rdd2: RDD[B], preservesPartitioning: Boolean, preservesPartitionSizes: Boolean)
+      (f: (Iterator[T], Iterator[B]) => Iterator[V]): RDD[V] = withScope {
+    new ZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2,
+      preservesPartitioning = preservesPartitioning,
+      preservesPartitionSizes = preservesPartitionSizes)
+  }
+
   /**
    * Zip this RDD's partitions with one (or more) RDD(s) and return a new RDD by
    * applying a function to the zipped partitions. Assumes that all the RDDs have the
@@ -1011,13 +1021,17 @@ abstract class RDD[T: ClassTag](
   def zipPartitions[B: ClassTag, V: ClassTag]
       (rdd2: RDD[B], preservesPartitioning: Boolean)
       (f: (Iterator[T], Iterator[B]) => Iterator[V]): RDD[V] = withScope {
-    new ZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2, preservesPartitioning)
+    zipPartitions(rdd2,
+      preservesPartitioning = preservesPartitioning,
+      preservesPartitionSizes = false)(f)
   }
 
   def zipPartitions[B: ClassTag, V: ClassTag]
       (rdd2: RDD[B])
       (f: (Iterator[T], Iterator[B]) => Iterator[V]): RDD[V] = withScope {
-    zipPartitions(rdd2, preservesPartitioning = false)(f)
+    zipPartitions(rdd2,
+      preservesPartitioning = false,
+      preservesPartitionSizes = false)(f)
   }
 
   def zipPartitions[B: ClassTag, C: ClassTag, V: ClassTag]

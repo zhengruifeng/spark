@@ -81,7 +81,8 @@ private[spark] class ZippedPartitionsRDD2[A: ClassTag, B: ClassTag, V: ClassTag]
     var f: (Iterator[A], Iterator[B]) => Iterator[V],
     var rdd1: RDD[A],
     var rdd2: RDD[B],
-    preservesPartitioning: Boolean = false)
+    preservesPartitioning: Boolean = false,
+    val preservesPartitionSizes: Boolean = false)
   extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2), preservesPartitioning) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {

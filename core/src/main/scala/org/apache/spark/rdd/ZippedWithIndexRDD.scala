@@ -40,14 +40,18 @@ class ZippedWithIndexRDDPartition(val prev: Partition, val startIndex: Long)
 private[spark]
 class ZippedWithIndexRDD[T: ClassTag](prev: RDD[T]) extends RDD[(T, Long)](prev) {
 
-  private def getAncestorWithSamePartitionSizes(rdd: RDD[_]): RDD[_] = {
+  private def getAncestorWithSamePartitionSizes(rdd: RDD[_], depth: Int): (RDD[_], Int) = {
     rdd match {
-      case c: RDD[_] if c.getStorageLevel != StorageLevel.NONE => c
+      case c: RDD[_] if c.getStorageLevel != StorageLevel.NONE => (c, depth)
       case m: MapPartitionsRDD[_, _] if m.preservesPartitionSizes =>
-        getAncestorWithSamePartitionSizes(m.prev)
+        getAncestorWithSamePartitionSizes(m.prev, depth + 1)
       case m: MapPartitionsWithEvaluatorRDD[_, _] if m.preservesPartitionSizes =>
-        getAncestorWithSamePartitionSizes(m.prev)
-      case _ => rdd
+        getAncestorWithSamePartitionSizes(m.prev, depth + 1)
+      case z: ZippedPartitionsRDD2[_, _, _] if z.preservesPartitionSizes =>
+        val left = getAncestorWithSamePartitionSizes(z.rdd1, depth + 1)
+        val right = getAncestorWithSamePartitionSizes(z.rdd2, depth + 1)
+        if (left._2 >= right._2) left else right
+      case _ => (rdd, depth)
     }
   }
 
@@ -59,7 +63,7 @@ class ZippedWithIndexRDD[T: ClassTag](prev: RDD[T]) extends RDD[(T, Long)](prev)
     } else if (n == 1) {
       Array(0L)
     } else {
-      val ancestor = getAncestorWithSamePartitionSizes(prev)
+      val (ancestor, _) = getAncestorWithSamePartitionSizes(prev, 0)
       ancestor.context.runJob(
         ancestor,
         Utils.getIteratorSize _,
