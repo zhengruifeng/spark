@@ -600,8 +600,8 @@ class BaseUDFTestsMixin(object):
 
             self.check_error(
                 exception=pe.exception,
-                errorClass="NOT_CALLABLE",
-                messageParameters={"arg_name": "func", "arg_type": "str"},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={"expected_type": "a callable", "arg_name": "func", "arg_type": "str"},
             )
 
     def test_non_existed_udf(self):
@@ -1268,8 +1268,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_CALLABLE",
-            messageParameters={"arg_name": "func", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a callable", "arg_name": "func", "arg_type": "str"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1277,8 +1277,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_DATATYPE_OR_STR",
-            messageParameters={"arg_name": "returnType", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a DataType or str", "arg_name": "returnType", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1286,8 +1286,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_INT",
-            messageParameters={"arg_name": "evalType", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "an int", "arg_name": "evalType", "arg_type": "str"},
         )
 
     def test_timeout_util_with_udf(self):

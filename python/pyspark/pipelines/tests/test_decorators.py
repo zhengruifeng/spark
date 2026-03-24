@@ -30,7 +30,7 @@ class DecoratorsTest(unittest.TestCase):
                 def dataset_with_non_string_name():
                     raise NotImplementedError()
 
-            assert context.exception.getCondition() == "NOT_STR"
+            assert context.exception.getCondition() == "NOT_EXPECTED_TYPE"
             assert context.exception.getMessageParameters() == {
                 "arg_name": "name",
                 "arg_type": "int",
@@ -44,7 +44,7 @@ class DecoratorsTest(unittest.TestCase):
                 def dataset_with_invalid_partition_cols():
                     raise NotImplementedError()
 
-            assert context.exception.getCondition() == "NOT_LIST_OF_STR"
+            assert context.exception.getCondition() == "NOT_EXPECTED_TYPE"
             assert context.exception.getMessageParameters() == {
                 "arg_name": "partition_cols",
                 "arg_type": "list",

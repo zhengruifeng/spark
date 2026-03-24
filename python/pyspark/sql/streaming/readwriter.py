@@ -172,8 +172,8 @@ class DataStreamReader(OptionUtils):
             self._jreader = self._jreader.schema(schema)
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR_OR_STRUCT",
-                messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={"expected_type": "a str or struct type", "arg_name": "schema", "arg_type": type(schema).__name__},
             )
         return self
 
@@ -271,8 +271,9 @@ class DataStreamReader(OptionUtils):
         """
         if not isinstance(source_name, str):
             raise PySparkTypeError(
-                errorClass="NOT_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "a str",
                     "arg_name": "source_name",
                     "arg_type": type(source_name).__name__,
                 },
@@ -462,8 +463,8 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.json(path))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={"expected_type": "a str", "arg_name": "path", "arg_type": type(path).__name__},
             )
 
     def orc(
@@ -513,8 +514,8 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.orc(path))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={"expected_type": "a str", "arg_name": "path", "arg_type": type(path).__name__},
             )
 
     def parquet(
@@ -575,8 +576,8 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.parquet(path))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={"expected_type": "a str", "arg_name": "path", "arg_type": type(path).__name__},
             )
 
     def text(
@@ -644,8 +645,8 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.text(path))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={"expected_type": "a str", "arg_name": "path", "arg_type": type(path).__name__},
             )
 
     def csv(
@@ -767,8 +768,8 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.csv(path))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={"expected_type": "a str", "arg_name": "path", "arg_type": type(path).__name__},
             )
 
     def xml(
@@ -866,8 +867,8 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.xml(path))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={"expected_type": "a str", "arg_name": "path", "arg_type": type(path).__name__},
             )
 
     def table(self, tableName: str) -> "DataFrame":
@@ -915,8 +916,8 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.table(tableName))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={"expected_type": "a str", "arg_name": "tableName", "arg_type": type(tableName).__name__},
             )
 
 

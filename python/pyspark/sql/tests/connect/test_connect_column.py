@@ -137,8 +137,9 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "a Column or int",
                 "arg_name": "startPos",
                 "arg_type": "float",
             },
@@ -554,8 +555,8 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_DATATYPE_OR_STR",
-            messageParameters={"arg_name": "dataType", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a DataType or str", "arg_name": "dataType", "arg_type": "int"},
         )
 
     def test_isin(self):
@@ -911,8 +912,8 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "fieldName", "arg_type": "Column"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a str", "arg_name": "fieldName", "arg_type": "Column"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -920,8 +921,8 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN",
-            messageParameters={"arg_name": "col", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a Column", "arg_name": "col", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -929,8 +930,8 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "fieldName", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a str", "arg_name": "fieldName", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkValueError) as pe:

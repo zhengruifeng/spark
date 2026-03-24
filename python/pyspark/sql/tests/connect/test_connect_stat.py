@@ -194,8 +194,9 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "a str",
                 "arg_name": "col1",
                 "arg_type": "int",
             },
@@ -206,8 +207,9 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "a str",
                 "arg_name": "col2",
                 "arg_type": "int",
             },
@@ -240,8 +242,9 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_LIST_OR_STR_OR_TUPLE",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "a list, str or tuple",
                 "arg_name": "col",
                 "arg_type": "int",
             },
@@ -252,8 +255,9 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_LIST_OR_TUPLE",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "a list or tuple",
                 "arg_name": "probabilities",
                 "arg_type": "float",
             },
@@ -265,8 +269,8 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_LIST_OF_FLOAT_OR_INT",
-            messageParameters={"arg_name": "probabilities", "arg_type": "float"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a list[float, int]", "arg_name": "probabilities", "arg_type": "float"},
         )
         with self.assertRaises(PySparkTypeError) as pe:
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(
@@ -275,8 +279,9 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_FLOAT_OR_INT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "a float or int",
                 "arg_name": "relativeError",
                 "arg_type": "str",
             },
@@ -315,8 +320,9 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_LIST_OR_TUPLE",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "a list or tuple",
                 "arg_name": "cols",
                 "arg_type": "str",
             },
@@ -537,8 +543,9 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_BOOL_OR_FLOAT_OR_INT_OR_STR",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "a bool, float, int or str",
                 "arg_name": "value",
                 "arg_type": "bytes",
             },

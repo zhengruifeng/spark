@@ -236,8 +236,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "col", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a Column or str", "arg_name": "col", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -245,8 +245,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_DICT",
-            messageParameters={"arg_name": "fractions", "arg_type": "list"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a dict", "arg_name": "fractions", "arg_type": "list"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -273,8 +273,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "col1", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a str", "arg_name": "col1", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -282,8 +282,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "col2", "arg_type": "bool"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a str", "arg_name": "col2", "arg_type": "bool"},
         )
 
     def test_crosstab(self):
@@ -916,8 +916,9 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "a Column or int",
                 "arg_name": "startPos",
                 "arg_type": "str",
             },
@@ -1709,8 +1710,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT_OR_STR",
-            messageParameters={"arg_name": "pos", "arg_type": "float"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a Column, int or str", "arg_name": "pos", "arg_type": "float"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1718,8 +1719,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT_OR_STR",
-            messageParameters={"arg_name": "len", "arg_type": "float"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a Column, int or str", "arg_name": "len", "arg_type": "float"},
         )
 
     def test_percentile(self):
@@ -3127,8 +3128,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "errMsg", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a Column or str", "arg_name": "errMsg", "arg_type": "int"},
         )
 
     def test_raise_error(self):
@@ -3148,8 +3149,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "errMsg", "arg_type": "NoneType"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a Column or str", "arg_name": "errMsg", "arg_type": "NoneType"},
         )
 
     def test_sum_distinct(self):
@@ -3437,8 +3438,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "json", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a Column or str", "arg_name": "json", "arg_type": "int"},
         )
 
     def test_try_parse_json(self):
@@ -3491,8 +3492,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "csv", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a Column or str", "arg_name": "csv", "arg_type": "int"},
         )
 
     def test_from_csv(self):
@@ -3502,8 +3503,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a Column or str", "arg_name": "schema", "arg_type": "int"},
         )
 
     def test_schema_of_xml(self):
@@ -3512,8 +3513,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "xml", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a Column or str", "arg_name": "xml", "arg_type": "int"},
         )
 
     def test_from_xml(self):
@@ -3523,8 +3524,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR_OR_STRUCT",
-            messageParameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a StructType, Column or str", "arg_name": "schema", "arg_type": "int"},
         )
 
     def test_greatest(self):
@@ -3544,8 +3545,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN",
-            messageParameters={"arg_name": "condition", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a Column", "arg_name": "condition", "arg_type": "str"},
         )
 
     def test_window(self):
@@ -3554,8 +3555,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "windowDuration", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a str", "arg_name": "windowDuration", "arg_type": "int"},
         )
 
     def test_session_window(self):
@@ -3564,8 +3565,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "gapDuration", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a Column or str", "arg_name": "gapDuration", "arg_type": "int"},
         )
 
     def test_current_user(self):
@@ -3583,8 +3584,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT",
-            messageParameters={"arg_name": "numBuckets", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "a Column or int", "arg_name": "numBuckets", "arg_type": "str"},
         )
 
     def test_to_time(self):

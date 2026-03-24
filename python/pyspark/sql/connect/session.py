@@ -375,8 +375,8 @@ class SparkSession:
     def table(self, tableName: str) -> ParentDataFrame:
         if not isinstance(tableName, str):
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={"expected_type": "a str", "arg_name": "tableName", "arg_type": type(tableName).__name__},
             )
 
         return self.read.table(tableName)
@@ -502,8 +502,9 @@ class SparkSession:
 
         elif schema is not None:
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "a list, None or StructType",
                     "arg_name": "schema",
                     "arg_type": type(schema).__name__,
                 },

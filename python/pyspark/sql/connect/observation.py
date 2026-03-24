@@ -36,8 +36,8 @@ class Observation:
         if name is not None:
             if not isinstance(name, str):
                 raise PySparkTypeError(
-                    errorClass="NOT_STR",
-                    messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={"expected_type": "a str", "arg_name": "name", "arg_type": type(name).__name__},
                 )
             if name == "":
                 raise PySparkValueError(
