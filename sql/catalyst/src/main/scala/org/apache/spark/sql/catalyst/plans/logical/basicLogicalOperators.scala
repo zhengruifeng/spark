@@ -109,6 +109,15 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   override lazy val validConstraints: ExpressionSet =
     getAllValidConstraints(projectList)
 
+  /**
+   * Returns true if the project list contains only scalar (1:1 row mapping) expressions,
+   * i.e. no Generator, AggregateExpression, or WindowExpression.
+   */
+  def isScalar: Boolean = !projectList.exists(_.exists {
+    case _: AggregateExpression | _: Generator | _: WindowExpression => true
+    case _ => false
+  })
+
   override def metadataOutput: Seq[Attribute] =
     getTagValue(Project.hiddenOutputTag).getOrElse(child.metadataOutput)
 
