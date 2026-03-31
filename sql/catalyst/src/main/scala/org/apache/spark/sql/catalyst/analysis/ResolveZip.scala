@@ -25,25 +25,28 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.ZIP
 /**
  * Resolves a [[Zip]] node by rewriting it into a single [[Project]] over the shared base plan.
  *
- * Both children of Zip must derive from the same base plan through chains of scalar Project
- * nodes (1:1 row mapping -- no Generator, AggregateExpression, or WindowExpression).
+ * Both children of Zip must derive from the same base plan through chains of Project nodes.
+ * Since this rule requires `childrenResolved`, and `Project.resolved` already rejects
+ * non-scalar expressions (Generator, AggregateExpression, WindowExpression), the children
+ * are guaranteed to be scalar (1:1 row mapping) by the time this rule fires.
+ *
  * This rule:
  * 1. Waits for both children to be resolved
- * 2. Strips scalar Project layers from each side to find the base plan
+ * 2. Strips Project layers from each side to find the base plan
  * 3. Verifies the base plans produce the same result (via `sameResult`)
  * 4. Remaps the right side's attribute references to the left base plan's output
  * 5. Produces a single Project that combines both sides' expressions
  *
- * If the base plans do not match, or a Project is not scalar, the Zip node remains unresolved
- * and CheckAnalysis will report a [[ZIP_PLANS_NOT_MERGEABLE]] error.
+ * If the base plans do not match, the Zip node remains unresolved and CheckAnalysis
+ * will report a [[ZIP_PLANS_NOT_MERGEABLE]] error.
  */
 object ResolveZip extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsPattern(ZIP), ruleId) {
     case z: Zip if z.childrenResolved =>
-      val (leftExprs, leftBase, leftScalar) = extractProjectAndBase(z.left)
-      val (rightExprs, rightBase, rightScalar) = extractProjectAndBase(z.right)
-      if (leftScalar && rightScalar && leftBase.sameResult(rightBase)) {
+      val (leftExprs, leftBase) = extractProjectAndBase(z.left)
+      val (rightExprs, rightBase) = extractProjectAndBase(z.right)
+      if (leftBase.sameResult(rightBase)) {
         // Build an attribute mapping from rightBase output to leftBase output (by position)
         val attrMapping = AttributeMap(rightBase.output.zip(leftBase.output))
         // Remap right expressions to reference leftBase's attributes
@@ -58,13 +61,9 @@ object ResolveZip extends Rule[LogicalPlan] {
       }
   }
 
-  /**
-   * Extracts the project expression list, the base plan, and whether the projection is scalar
-   * (1:1 row mapping). A bare plan (no Project wrapper) is always considered scalar.
-   */
   private def extractProjectAndBase(
-      plan: LogicalPlan): (Seq[NamedExpression], LogicalPlan, Boolean) = plan match {
-    case p @ Project(projectList, child) => (projectList, child, p.isScalar)
-    case other => (other.output, other, true)
+      plan: LogicalPlan): (Seq[NamedExpression], LogicalPlan) = plan match {
+    case Project(projectList, child) => (projectList, child)
+    case other => (other.output, other)
   }
 }
