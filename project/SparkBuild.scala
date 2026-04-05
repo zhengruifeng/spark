@@ -1194,6 +1194,8 @@ object DependencyOverrides {
     dependencyOverrides ++= {
       val guavaVersion = sys.props.get("guava.version").getOrElse(
         SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String])
+      val gsonVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("gson.version").asInstanceOf[String]
       val jlineVersion =
         SbtPomKeys.effectivePom.value.getProperties.get("jline.version").asInstanceOf[String]
       val avroVersion =
@@ -1204,6 +1206,7 @@ object DependencyOverrides {
         SbtPomKeys.effectivePom.value.getProperties.get("xz.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
+        "com.google.code.gson" % "gson" % gsonVersion,
         "jline" % "jline" % jlineVersion,
         "org.apache.avro" % "avro" % avroVersion,
         "org.slf4j" % "slf4j-api" % slf4jVersion,
