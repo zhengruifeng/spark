@@ -820,6 +820,22 @@ abstract class Dataset[T] extends Serializable {
   def crossJoin(right: Dataset[_]): DataFrame
 
   /**
+   * Combines the columns of this DataFrame with another DataFrame that derives from the same
+   * base plan through Project operations. The analyzer rewrites the resulting Zip node into a
+   * single Project over the shared base plan.
+   *
+   * @param other
+   *   Another DataFrame that shares the same base plan.
+   * @return
+   *   A new DataFrame with columns from both sides.
+   * @throws AnalysisException
+   *   if the two DataFrames do not derive from the same base plan.
+   * @group untypedrel
+   * @since 4.1.0
+   */
+  def zip(other: Dataset[_]): DataFrame
+
+  /**
    * Joins this Dataset returning a `Tuple2` for each pair where `condition` evaluates to true.
    *
    * This is similar to the relation `join` function with one important difference in the result
