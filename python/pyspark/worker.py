@@ -207,6 +207,13 @@ class EvalConf(Conf):
         except ValueError:
             return port
 
+    @property
+    def input_type(self) -> Optional[DataType]:
+        input_type = self.get("input_type", None, lower_str=False)
+        if input_type is None:
+            return None
+        return _parse_datatype_json_string(input_type)
+
 
 def report_times(outfile, boot, init, finish, processing_time_ms):
     write_int(SpecialLengths.TIMING_DATA, outfile)
@@ -2532,10 +2539,8 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
             PythonEvalType.SQL_SCALAR_ARROW_UDF,
             PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+            PythonEvalType.SQL_ARROW_BATCHED_UDF,
         ):
-            ser = ArrowStreamSerializer(write_start_stream=True)
-        elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF:
-            input_type = _parse_datatype_json_string(utf8_deserializer.loads(infile))
             ser = ArrowStreamSerializer(write_start_stream=True)
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
@@ -2865,7 +2870,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             ArrowTableToRowsConversion._create_converter(
                 f.dataType, none_on_identity=True, binary_as_bytes=runner_conf.binary_as_bytes
             )
-            for f in input_type
+            for f in eval_conf.input_type
         ]
 
         @fail_on_stopiteration
@@ -2968,7 +2973,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 pandas_columns = ArrowBatchTransformer.to_pandas(
                     input_batch,
                     timezone=runner_conf.timezone,
-                    schema=input_type,
+                    schema=eval_conf.input_type,
                     struct_in_pandas="row",
                     ndarray_as_list=True,
                     prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
