@@ -3496,6 +3496,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def parseInputNotStringTypeError(dataType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "PARSE_INPUT_NOT_STRING_TYPE",
+      messageParameters = Map("dataType" -> toSQLType(dataType)))
+  }
+
   def textDataSourceWithMultiColumnsError(schema: StructType): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1290",
