@@ -2201,6 +2201,23 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.preserveOrderingOnCoalesce.enabled")
+      .doc(s"When turned on, GroupPartitionsExec will use sorted merge to preserve full " +
+        s"ordering (as opposed to the key-derived ordering preserved by " +
+        s"${V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key}) when coalescing " +
+        s"multiple partitions with the same key. This allows eliminating downstream sorts when " +
+        s"data is both partitioned and sorted. When this config is enabled, the effect of " +
+        s"${V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key} is fully subsumed: " +
+        s"full ordering implies key-derived ordering. However, sorted merge uses more resources " +
+        s"(priority queue, comparison overhead) than simple concatenation, especially when " +
+        s"coalescing many partitions. When turned off, only key-derived ordering is preserved " +
+        s"during coalescing. This config requires ${V2_BUCKETING_ENABLED.key} to be enabled.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed.")
     .version("2.4.0")
@@ -7828,6 +7845,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def v2BucketingPreserveKeyOrderingOnCoalesceEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED)
+
+  def v2BucketingPreserveOrderingOnCoalesceEnabled: Boolean =
+    getConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
