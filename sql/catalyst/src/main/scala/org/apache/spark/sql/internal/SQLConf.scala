@@ -2662,6 +2662,25 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val OPTIMIZE_EXPAND_RATIO =
+    buildConf("spark.sql.optimizer.optimizeExpandRatio")
+      .internal()
+      .doc(
+        "Threshold for inserting a pre-aggregation step before the Expand operator " +
+        "produced by RewriteDistinctAggregates. Queries with multiple COUNT(DISTINCT) " +
+        "on different columns are rewritten using an Expand that duplicates each row " +
+        "N times (one per distinct group). When N >= this threshold, a de-duplication " +
+        "aggregate on (grouping keys + all distinct columns) is inserted before the " +
+        "Expand to reduce the amplified data volume. Only applies to pure distinct " +
+        "aggregates without non-distinct aggregates or FILTER clauses. " +
+        "Set to -1 to disable.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(v => v >= 2 || v == -1,
+        "The threshold must be >= 2 or -1 (disabled)")
+      .createWithDefault(-1)
+
   val REMOVE_REDUNDANT_PROJECTS_ENABLED = buildConf("spark.sql.execution.removeRedundantProjects")
     .internal()
     .doc("Whether to remove redundant project exec node based on children's output and " +
