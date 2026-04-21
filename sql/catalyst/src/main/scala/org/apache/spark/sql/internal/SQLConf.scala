@@ -7155,6 +7155,21 @@ object SQLConf {
       .createWithDefault(false)
   }
 
+  val XML_VARIANT_RESPECT_INFER_SCHEMA =
+    buildConf("spark.sql.xml.variant.respectInferSchema")
+      .doc(
+        "Kill switch for the SPARK-56554 fix. When true (default), the XML to Variant parser " +
+        "honors the 'inferSchema' option: if 'inferSchema' is false, primitive leaf values " +
+        "(text and attributes) are preserved as strings inside the Variant instead of being " +
+        "inferred as boolean, long, or decimal. Set this conf to false to restore the " +
+        "pre-SPARK-56554 behavior of always inferring types regardless of the 'inferSchema' " +
+        "option."
+      )
+      .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val ASSUME_ANSI_FALSE_IF_NOT_PERSISTED =
     buildConf("spark.sql.assumeAnsiFalseIfNotPersisted.enabled")
       .internal()
@@ -8491,6 +8506,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyXMLParserEnabled: Boolean =
     getConf(SQLConf.LEGACY_XML_PARSER_ENABLED)
+
+  def xmlVariantRespectInferSchema: Boolean =
+    getConf(SQLConf.XML_VARIANT_RESPECT_INFER_SCHEMA)
 
   def coerceMergeNestedTypes: Boolean =
     getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)
