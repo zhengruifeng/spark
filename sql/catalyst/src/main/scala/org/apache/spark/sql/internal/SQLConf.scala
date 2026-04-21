@@ -2439,6 +2439,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PATH_ENABLED =
+    buildConf("spark.sql.path.enabled")
+      .version("4.2.0")
+      .doc("When true, enables the SQL Standard PATH feature: SET PATH, path-based routine " +
+        "resolution, and CURRENT_PATH(). When false, SET PATH is rejected and resolution uses " +
+        "the default path only.")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
     .version("1.4.0")
@@ -8408,28 +8418,43 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
    */
   def prioritizeSystemCatalog: Boolean = !getConf(SQLConf.PERSISTENT_CATALOG_FIRST)
 
+  def pathEnabled: Boolean = getConf(SQLConf.PATH_ENABLED)
+
   /**
    * Returns the resolution search path for error messages and resolution order.
    * This is the single source of truth for the search path used for functions, tables, and views.
    * Uses [[sessionFunctionResolutionOrder]]: "first" (session first), "second" (session second),
    * "last" (session last). When catalogPath is empty, returns only system namespaces.
    */
-  def resolutionSearchPath(catalogPath: Seq[String]): Seq[Seq[String]] = {
+  def resolutionSearchPath(catalogPath: Seq[String]): Seq[Seq[String]] =
+    defaultPathOrder(if (catalogPath.isEmpty) Seq.empty else Seq(catalogPath))
+
+  /**
+   * Orders the given catalog path entries by [[sessionFunctionResolutionOrder]], inserting
+   * system.session and system.builtin. Used by both the legacy single-schema resolution and
+   * by SET PATH's DEFAULT_PATH / SYSTEM_PATH expansion to keep ordering in sync.
+   *
+   * @param catalogEntries persistent catalog path entries (may be empty).
+   */
+  def defaultPathOrder(catalogEntries: Seq[Seq[String]]): Seq[Seq[String]] = {
     val order = sessionFunctionResolutionOrder
     val session = Seq("system", "session")
     val builtin = Seq("system", "builtin")
     order match {
       case "first" =>
-        if (catalogPath.isEmpty) Seq(session, builtin)
-        else Seq(session, builtin, catalogPath)
+        if (catalogEntries.isEmpty) Seq(session, builtin)
+        else Seq(session, builtin) ++ catalogEntries
       case "last" =>
-        if (catalogPath.isEmpty) Seq(builtin, session)
-        else Seq(builtin, catalogPath, session)
+        if (catalogEntries.isEmpty) Seq(builtin, session)
+        else Seq(builtin) ++ catalogEntries ++ Seq(session)
       case _ => // "second"
-        if (catalogPath.isEmpty) Seq(builtin, session)
-        else Seq(builtin, session, catalogPath)
+        if (catalogEntries.isEmpty) Seq(builtin, session)
+        else Seq(builtin, session) ++ catalogEntries
     }
   }
+
+  /** System-only path (builtin + session) ordered by [[sessionFunctionResolutionOrder]]. */
+  def systemPathOrder: Seq[Seq[String]] = defaultPathOrder(Seq.empty)
 
   override def legacyParameterSubstitutionConstantsOnly: Boolean =
     getConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY)
