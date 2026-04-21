@@ -15,16 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector
+package org.apache.spark.sql.connector.write
 
-class DeltaBasedNoMetadataUpdateTableSuite extends UpdateTableSuiteBase {
-
-  override protected def deltaUpdate: Boolean = true
-
-  override protected def extraTableProps: java.util.Map[String, String] = {
-    val props = new java.util.HashMap[String, String]()
-    props.put("supports-deltas", "true")
-    props.put("no-metadata", "true")
-    props
-  }
+/**
+ * Implementation of [[UpdateSummary]] that provides UPDATE operation summary.
+ */
+private[sql] case class UpdateSummaryImpl(
+    numUpdatedRows: Long,
+    numCopiedRows: Long)
+  extends UpdateSummary {
 }
