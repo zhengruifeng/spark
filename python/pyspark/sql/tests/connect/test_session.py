@@ -52,6 +52,8 @@ class SparkSessionTestCase(unittest.TestCase):
             CustomChannelBuilder("sc://other")
         ).getOrCreate()
         host = test_session.client.host
+        # Skip release_session() since "sc://other" is a fake remote.
+        test_session.release_session_on_close = False
         test_session.stop()
 
         self.assertEqual("other", host)
@@ -59,12 +61,14 @@ class SparkSessionTestCase(unittest.TestCase):
     def test_creates_session_with_remote(self):
         test_session = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
         host = test_session.client.host
+        test_session.release_session_on_close = False
         test_session.stop()
 
         self.assertEqual("other", host)
 
     def test_session_stop(self):
         session = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
+        session.release_session_on_close = False
 
         self.assertFalse(session.is_stopped)
         session.stop()
@@ -75,6 +79,7 @@ class SparkSessionTestCase(unittest.TestCase):
         session2 = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
 
         self.assertIs(session, session2)
+        session.release_session_on_close = False
         session.stop()
 
     def test_active_session_expires_when_client_closes(self):
