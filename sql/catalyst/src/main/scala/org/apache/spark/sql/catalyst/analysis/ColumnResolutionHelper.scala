@@ -527,10 +527,25 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     val planId = planIdOpt.get
     logDebug(s"Extract plan_id $planId from $u")
 
-    val isMetadataAccess = u.containsTag(LogicalPlan.IS_METADATA_COL)
-
-    val (resolved, matched) = resolveDataFrameColumnByPlanId(
-      u, planId, isMetadataAccess, q, 0)
+    val (resolved, matched) = if (u.containsTag(LogicalPlan.IS_METADATA_COL)) {
+      // Metadata access (e.g. `df["_metadata"]`): the resolved attribute lives
+      // in `p.metadataOutput`, so filter ancestors by `p.metadataOutput`.
+      resolveDataFrameColumnByPlanId(
+        u, planId, true, q, 0, plan => AttributeSet(plan.metadataOutput))
+    } else {
+      // Regular access: try the strict `p.outputSet` filter first.
+      // That drops candidates hidden at an ancestor, e.g. the right side's join
+      // key after a natural/USING join. Fall back to `p.output ++ p.metadataOutput`
+      // only when strict resolves nothing, handling the SPARK-55070
+      // `rhs["join_key"]` case. Mirrors `outputAttributes.resolve orElse
+      // outputMetadataAttributes.resolve` in `LogicalPlan.resolve`.
+      resolveDataFrameColumnByPlanId(
+          u, planId, false, q, 0, plan => plan.outputSet) match {
+        case (Some(r), m) => (Some(r), m)
+        case _ => resolveDataFrameColumnByPlanId(u, planId, false, q, 0,
+          plan => AttributeSet(plan.output ++ plan.metadataOutput))
+      }
+    }
     if (!matched) {
       // Can not find the target plan node with plan id, e.g.
       //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
@@ -546,9 +561,11 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       id: Long,
       isMetadataAccess: Boolean,
       q: Seq[LogicalPlan],
-      currentDepth: Int): (Option[(NamedExpression, Int)], Boolean) = {
+      currentDepth: Int,
+      getAllowed: LogicalPlan => AttributeSet
+      ): (Option[(NamedExpression, Int)], Boolean) = {
     val resolved = q.map(resolveDataFrameColumnRecursively(
-      u, id, isMetadataAccess, _, currentDepth))
+      u, id, isMetadataAccess, _, currentDepth, getAllowed))
     val merged = resolved
       .flatMap(_._1)
       .sortBy(_._2) // sort by depth
@@ -566,7 +583,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       id: Long,
       isMetadataAccess: Boolean,
       p: LogicalPlan,
-      currentDepth: Int): (Option[(NamedExpression, Int)], Boolean) = {
+      currentDepth: Int,
+      getAllowed: LogicalPlan => AttributeSet
+      ): (Option[(NamedExpression, Int)], Boolean) = {
     val (resolved, matched) = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
       val resolved = if (!isMetadataAccess) {
         p.resolve(u.nameParts, conf.resolver)
@@ -585,7 +604,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         case _: Union => Seq.empty[LogicalPlan]
         case _ => p.children
       }
-      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, children, currentDepth + 1)
+      resolveDataFrameColumnByPlanId(
+        u, id, isMetadataAccess, children, currentDepth + 1, getAllowed)
     }
 
     // In self join case like:
@@ -619,10 +639,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     // In this case, resolveDataFrameColumnByPlanId returns None,
     // the dataframe column 'df.id' will remain unresolved, and the analyzer
     // will try to resolve 'id' without plan id later.
-    val filtered = resolved.filter { r =>
-      // A DataFrame column can be resolved as a metadata column, we should keep it.
-      r._1.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
-    }
+    val filtered = resolved.filter { case (r, _) => r.references.subsetOf(getAllowed(p)) }
     (filtered, matched)
   }
 
