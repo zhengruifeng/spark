@@ -558,6 +558,26 @@ class ColumnTestsMixin:
             self.assertTrue(df1.join(df2, "id", how).select(df1["id"]).count() >= 0, how)
             self.assertTrue(df1.join(df2, "id", how).select(df2["id"]).count() >= 0, how)
 
+    def test_select_regular_column_with_reused_dataframe_hidden_in_natural_join(self):
+        # A DataFrame appears both as a direct join side and inside a natural/USING
+        # join that hides one of its columns into `metadataOutput`. When resolving
+        # `dim["dim_id"]`, two candidates match the plan id: one from `p.output`
+        # (the direct join side) and one only visible via `p.metadataOutput` (the
+        # reused `dim` nested under the USING-join wrapper). We should prefer the
+        # regular candidate and not throw AMBIGUOUS_COLUMN_REFERENCE.
+        fact = self.spark.createDataFrame([(1, 10, "T1"), (2, 20, "T2")], ["id", "fk", "txn_id"])
+        dim = self.spark.createDataFrame([(10, "X"), (20, "Y"), (30, "Z")], ["dim_id", "dim_name"])
+        events = self.spark.createDataFrame(
+            [(10, "T1", 100), (20, "T2", 200)], ["dim_id", "txn_id", "amount"]
+        )
+        enriched = events.join(dim, "dim_id", "left")
+        result = (
+            fact.join(dim, fact["fk"] == dim["dim_id"], "left")
+            .join(enriched, "txn_id", "full_outer")
+            .select(dim["dim_id"])
+        )
+        self.assertEqual(result.count(), 2)
+
     def test_drop_notexistent_col(self):
         df1 = self.spark.createDataFrame(
             [("a", "b", "c")],
