@@ -458,6 +458,70 @@ def post_merge_comment(pr_num, merged_commits):
     comment_pr(pr_num, body)
 
 
+# Attribution substring that identifies a comment as one written by post_merge_comment. Using
+# the "merge_spark_pr.py" mention (present in both the current "**Merge Summary:** ... *Posted by
+# merge_spark_pr.py*" layout and the earlier "**Merge summary** (posted by ...)" one) keeps this
+# robust to header/footer wording changes; the per-line regex below is what actually harvests refs.
+_MERGE_SUMMARY_MARKER = "merge_spark_pr.py"
+# Matches a merge-summary bullet, e.g. "- merged into branch-4.x https://.../commit/abc123".
+_MERGE_SUMMARY_LINE_RE = re.compile(r"^- merged into (\S+) ")
+
+
+def merged_refs_from_comments(pr_num):
+    """Return the set of branch refs a PR's change has already landed on, read from the
+    "Merge Summary" comments that ``post_merge_comment`` posts on each (backport) run.
+
+    These comments are the ground truth for which branches already contain the commit, so
+    the backport flow can drop them from the default and warn if one is typed. Aggregates
+    across every merge-summary comment (initial merge plus any later backport runs).
+    """
+    comments = get_json("%s/issues/%s/comments" % (GITHUB_API_BASE, pr_num))
+    refs = set()
+    for comment in comments:
+        body = comment.get("body") or ""
+        if _MERGE_SUMMARY_MARKER not in body:
+            continue
+        for line in body.splitlines():
+            m = _MERGE_SUMMARY_LINE_RE.match(line)
+            if m:
+                refs.add(m.group(1))
+    return refs
+
+
+def default_pick_branch(remaining_branches, branch_names, target_ref):
+    """Pick the default cherry-pick target: the highest-ranked remaining branch that ranks
+    strictly below ``target_ref`` (backports flow downward, master -> branch-M.x -> branch-M.N).
+
+    This keeps the default from suggesting a forward-port up the tree, e.g. a PR merged into
+    branch-4.1 must not default to branch-4.x. ``master`` ranks above every release branch
+    (semver_branch_rank only ranks branch-* names, so master is treated as +inf here), so its
+    default is simply the highest-ranked remaining branch. Falls back to the first remaining
+    branch (or branch_names[0] when none remain) if nothing ranks strictly below the target.
+
+    >>> default_pick_branch(["branch-4.2", "branch-4.1"], ["branch-4.x", "branch-4.2",
+    ...                      "branch-4.1"], "master")
+    'branch-4.2'
+    >>> default_pick_branch(["branch-4.x", "branch-4.2", "branch-4.0"],
+    ...                      ["branch-4.x", "branch-4.2", "branch-4.1", "branch-4.0"],
+    ...                      "branch-4.1")
+    'branch-4.0'
+    >>> default_pick_branch(["branch-4.x"], ["branch-4.x", "branch-4.1"], "branch-4.1")
+    'branch-4.x'
+    >>> default_pick_branch([], ["branch-4.x"], "master")
+    'branch-4.x'
+    """
+    if not remaining_branches:
+        return branch_names[0]
+    # master isn't a branch-* name, so semver_branch_rank would misrank it (-1, -1); treat any
+    # non-release target as ranking above all release branches so its default is unconstrained.
+    if re.match(r"^branch-(\d+)\.(x|\d+)$", target_ref):
+        target_rank = semver_branch_rank(target_ref)
+        below = [b for b in remaining_branches if semver_branch_rank(b) < target_rank]
+        if below:
+            return below[0]
+    return remaining_branches[0]
+
+
 def fail(msg):
     print_error(msg)
     clean_up()
@@ -648,6 +712,17 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
         if pick_ref == "":
             pick_ref = default_branch
         if pick_ref in branch_names:
+            if pick_ref in already_picked:
+                # already_picked branches already contain the commit (from an earlier merge,
+                # a prior pick this run, or a merge-summary comment). Never the default, but
+                # warn and confirm rather than hard-block in case the records are stale.
+                warn_msg = (
+                    "'%s' already contains %s; cherry-picking would likely be a no-op. "
+                    "Pick into it anyway?" % (pick_ref, merge_hash)
+                )
+                if get_input(f"{warn_msg} (y/N): ", ["y", "n", ""]) == "y":
+                    break
+                continue
             break
         valid_branches = ", ".join(branch_names)
         print_error(
@@ -1495,11 +1570,40 @@ def main():
             fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
 
         print("Found commit %s:\n%s" % (merge_hash, message))
-        default = branch_names[0]
-        picked = cherry_pick(
-            pr_num, merge_hash, default, branch_names, target_ref, already_picked=()
-        )
-        post_merge_comment(pr_num, picked)
+
+        # Branches the commit already reached, per the PR's merge-summary comments (the
+        # ground truth this script itself posts). Seed already_picked with them so they are
+        # never the default and the Upstream-First prompt skips a branch-M.x that already has
+        # the commit; drop them from the candidate defaults. This is why re-running a backport
+        # no longer suggests, say, branch-4.x when the original merge already landed there.
+        already_merged = merged_refs_from_comments(pr_num)
+        if already_merged:
+            print("Already merged into: %s" % ", ".join(sorted(already_merged)))
+        remaining_branches = [b for b in branch_names if b not in already_merged]
+
+        # Loop like the normal-merge path so a backport can fan out to multiple branches in
+        # one run, with a per-branch confirmation prompt before each pick.
+        merged_refs = list(already_merged)
+        merged_commits = []
+        pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
+        while get_input(f"\n{pick_prompt} (y/N): ", ["y", "n", ""]) == "y":
+            default = default_pick_branch(remaining_branches, branch_names, target_ref)
+            picked = cherry_pick(
+                pr_num,
+                merge_hash,
+                default,
+                branch_names,
+                target_ref,
+                already_picked=tuple(merged_refs),
+            )
+            picked_refs = [ref for ref, _ in picked]
+            merged_refs = merged_refs + picked_refs
+            merged_commits = merged_commits + picked
+            for b in picked_refs:
+                if b in remaining_branches:
+                    remaining_branches.remove(b)
+
+        post_merge_comment(pr_num, merged_commits)
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -1567,7 +1671,7 @@ def main():
     # already been pushed, so cancelling a backport must not drop that line.
     try:
         while get_input(f"\n{pick_prompt} (y/N): ", ["y", "n", ""]) == "y":
-            default = remaining_branches[0] if remaining_branches else branch_names[0]
+            default = default_pick_branch(remaining_branches, branch_names, target_ref)
             picked = cherry_pick(
                 pr_num,
                 merge_hash,
