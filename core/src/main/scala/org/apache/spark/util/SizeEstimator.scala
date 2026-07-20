@@ -213,6 +213,7 @@ object SizeEstimator extends Logging {
 
   private def visitSingleObject(obj: AnyRef, state: SearchState): Unit = {
     val cls = obj.getClass
+    val sizeBefore = state.size
     if (cls.isArray) {
       visitArray(obj, cls, state)
     } else if (cls.getName.startsWith("scala.reflect")) {
@@ -234,6 +235,9 @@ object SizeEstimator extends Logging {
           }
       }
     }
+    logWarning(
+      s"SizeEstimator estimated ${cls.getName}@${Integer.toHexString(System.identityHashCode(obj))} " +
+        s"with ${state.size - sizeBefore} bytes")
   }
 
   // Estimate the size of arrays larger than ARRAY_SIZE_FOR_SAMPLING by sampling.
